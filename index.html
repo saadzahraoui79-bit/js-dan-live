@@ -20,21 +20,56 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 14px;
+    padding: 10px 12px;
     background: rgba(255, 255, 255, 0.06);
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    gap: 8px;
   }
-  .brand { font-weight: bold; font-size: 15px; color: #ff2e93; }
-  .sync-status { font-size: 11px; color: #00e5ff; font-weight: bold; }
+  .brand { font-weight: bold; font-size: 14px; color: #ff2e93; }
+  .sync-status { font-size: 10px; color: #00e5ff; font-weight: bold; }
+  .voice-status { font-size: 10px; color: #ffd700; font-weight: bold; }
+
+  .nick-bar {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    align-items: center;
+  }
+  .nick-input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 12px;
+    outline: none;
+  }
+  .nick-input:focus { border-color: #00e5ff; }
+  .save-nick-btn {
+    background: linear-gradient(45deg, #00c6ff, #0072ff);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
   .mic-btn {
     background: #2b144d;
     color: #fff;
     border: 1px solid #ff2e93;
     padding: 6px 12px;
     border-radius: 20px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .mic-btn.active {
     background: #00c853;
@@ -135,7 +170,7 @@
     justify-content: center;
     align-items: center;
   }
-  .seat { position: absolute; width: 60px; text-align: center; cursor: pointer; }
+  .seat { position: absolute; width: 66px; text-align: center; cursor: pointer; }
   .avatar {
     width: 44px; height: 44px; margin: 0 auto 4px; border-radius: 50%;
     background: rgba(255, 255, 255, 0.1); border: 2px solid #666;
@@ -143,14 +178,17 @@
   }
   .seat.taken .avatar { border-color: #00f2fe; background: linear-gradient(45deg, #ff2e93, #7928ca); }
   .seat.picked .avatar { border-color: #ffd700; box-shadow: 0 0 18px #ffd700; transform: scale(1.12); }
-  .seat-label { font-size: 10px; background: rgba(0, 0, 0, 0.65); padding: 2px 6px; border-radius: 8px; }
+  .seat-label {
+    font-size: 10px; background: rgba(0, 0, 0, 0.65); padding: 2px 6px;
+    border-radius: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   .p1 { top: -22px; left: 50%; transform: translateX(-50%); }
-  .p2 { top: 34px; right: -14px; }
-  .p3 { bottom: 34px; right: -14px; }
+  .p2 { top: 34px; right: -16px; }
+  .p3 { bottom: 34px; right: -16px; }
   .p4 { bottom: -22px; left: 50%; transform: translateX(-50%); }
-  .p5 { bottom: 34px; left: -14px; }
-  .p6 { top: 34px; left: -14px; }
+  .p5 { bottom: 34px; left: -16px; }
+  .p6 { top: 34px; left: -16px; }
 
   .bottle-box { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 5; }
   .bottle { width: 30px; height: 80px; transition: transform 3.5s cubic-bezier(0.15, 0.85, 0.25, 1); }
@@ -175,11 +213,11 @@
 
   /* 3. كرسي الاعتراف (Hot Seat) */
   .hot-chair {
-    width: 120px; height: 120px; margin: 4px auto; border-radius: 50%;
+    width: 124px; height: 124px; margin: 4px auto; border-radius: 50%;
     background: radial-gradient(circle, rgba(255, 8, 68, 0.35), rgba(255, 153, 0, 0.1));
     border: 3px solid #ff5722; box-shadow: 0 0 22px rgba(255, 87, 34, 0.5);
     display: flex; flex-direction: column; justify-content: center; align-items: center;
-    cursor: pointer; text-align: center;
+    cursor: pointer; text-align: center; padding: 8px;
   }
   .hot-chair.active-seat { border-color: #ffd700; box-shadow: 0 0 28px #ffd700; }
 
@@ -217,9 +255,17 @@
     <div>
       <div class="brand">🎙️ JS DAN LIVE</div>
       <div class="sync-status" id="syncStatus">🔄 جاري الاتصال...</div>
+      <div class="voice-status" id="voiceStatus">🔇 الصوت الصوتي: متوقف</div>
     </div>
-    <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ المايك مغلق</button>
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ فتح المايك</button>
   </div>
+
+  <div class="nick-bar">
+    <input type="text" class="nick-input" id="nickInput" maxlength="16" placeholder="اكتب سميتك المستعارة هنا (مثلاً: JS DAN)...">
+    <button class="save-nick-btn" onclick="saveNickname()">حفظ الاسم</button>
+  </div>
+
+  <div id="remoteAudioContainer" style="display:none;"></div>
 
   <div class="nav-tabs">
     <button class="tab-btn active" id="tab-td" onclick="switchTab('td')">🍾 صراحة وجرأة</button>
@@ -415,7 +461,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, set, onValue, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, set, onValue, push, onChildAdded, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   const firebaseConfig = {
     databaseURL: "https://js-dan-live-default-rtdb.firebaseio.com/"
@@ -425,12 +471,16 @@
   const db = getDatabase(app);
   const roomRef = ref(db, "js_dan_live_room");
   const reactionsRef = ref(db, "js_dan_live_room/reactions");
+  const peersRef = ref(db, "js_dan_live_room/voice_peers");
 
   const clientId = "user_" + Math.random().toString(36).substring(2, 8);
-  const clientLabel = "لاعب " + clientId.slice(-3);
+  let clientLabel = localStorage.getItem("js_dan_nickname") || "JS DAN";
+
+  document.getElementById("nickInput").value = clientLabel;
 
   let micStream = null;
   let micActive = false;
+  const peerConnections = {};
 
   // حالة الغرفة المشتركة
   let roomState = {
@@ -469,6 +519,40 @@
     set(roomRef, roomState).catch(() => {});
   }
 
+  function updateMyLabelInSeats() {
+    const seats = roomState.tdSeats || {};
+    Object.keys(seats).forEach(k => {
+      if (seats[k] && seats[k].id === clientId) seats[k].label = clientLabel;
+    });
+
+    const pkSeats = roomState.pkSeats || {};
+    Object.keys(pkSeats).forEach(k => {
+      if (pkSeats[k] && pkSeats[k].id === clientId) pkSeats[k].label = clientLabel;
+    });
+
+    if (roomState.hotHolder && roomState.hotHolder.id === clientId) {
+      roomState.hotHolder.label = clientLabel;
+    }
+
+    const stSeats = roomState.stageSeats || {};
+    Object.keys(stSeats).forEach(k => {
+      if (stSeats[k] && stSeats[k].id === clientId) stSeats[k].label = clientLabel;
+    });
+
+    saveState();
+  }
+
+  window.saveNickname = function() {
+    const val = document.getElementById("nickInput").value.trim();
+    clientLabel = val || "JS DAN";
+    localStorage.setItem("js_dan_nickname", clientLabel);
+    document.getElementById("nickInput").value = clientLabel;
+    updateMyLabelInSeats();
+    if (micActive) {
+      set(ref(db, `js_dan_live_room/voice_peers/${clientId}/name`), clientLabel).catch(() => {});
+    }
+  };
+
   // التنقل بين الغرف الخمس
   window.switchTab = function(tab) {
     const tabs = ['td', 'pk', 'hot', 'quiz', 'mic'];
@@ -478,25 +562,165 @@
     });
   };
 
-  // الميكروفون
+  // الصوت المباشر عبر WebRTC + إشارات Firebase
+  const rtcConfig = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }
+    ]
+  };
+
+  function setVoiceStatus(txt) {
+    document.getElementById("voiceStatus").textContent = txt;
+  }
+
+  function attachRemoteStream(remoteId, stream) {
+    const container = document.getElementById("remoteAudioContainer");
+    let audioEl = document.getElementById("audio_" + remoteId);
+    if (!audioEl) {
+      audioEl = document.createElement("audio");
+      audioEl.id = "audio_" + remoteId;
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      container.appendChild(audioEl);
+    }
+    audioEl.srcObject = stream;
+    audioEl.play().catch(() => {});
+    setVoiceStatus("🔊 صوت مباشر شغال مع الغرفة");
+  }
+
+  function createPeerConnection(remoteId, isCaller) {
+    if (peerConnections[remoteId]) return peerConnections[remoteId];
+    const pc = new RTCPeerConnection(rtcConfig);
+    peerConnections[remoteId] = pc;
+
+    if (micStream) {
+      micStream.getTracks().forEach(track => pc.addTrack(track, micStream));
+    }
+
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        attachRemoteStream(remoteId, event.streams[0]);
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        const candRef = ref(db, `js_dan_live_room/voice_signals/${remoteId}/${clientId}/candidates`);
+        push(candRef, event.candidate.toJSON()).catch(() => {});
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") {
+        setVoiceStatus("🔊 متصل صوتياً مع مشاركين");
+      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        cleanupPeer(remoteId);
+      }
+    };
+
+    if (isCaller) {
+      pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+        set(ref(db, `js_dan_live_room/voice_signals/${remoteId}/${clientId}/offer`), {
+          type: pc.localDescription.type,
+          sdp: pc.localDescription.sdp,
+          name: clientLabel
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+
+    return pc;
+  }
+
+  function cleanupPeer(remoteId) {
+    if (peerConnections[remoteId]) {
+      peerConnections[remoteId].close();
+      delete peerConnections[remoteId];
+    }
+    const audioEl = document.getElementById("audio_" + remoteId);
+    if (audioEl) audioEl.remove();
+  }
+
   window.toggleMic = async function() {
     const btn = document.getElementById('micBtn');
     if (!micActive) {
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
         micActive = true;
         btn.textContent = '🎙️ المايك شغال';
         btn.classList.add('active');
+        setVoiceStatus("📡 جاري البحث عن متصلين صوتيين...");
+
+        await set(ref(db, `js_dan_live_room/voice_peers/${clientId}`), {
+          id: clientId,
+          name: clientLabel,
+          ts: Date.now()
+        });
       } catch (e) {
-        alert('عفاك وافق على صلاحية الميكروفون باش يخدم الصوت.');
+        alert('عفاك وافق على صلاحية الميكروفون باش يخدم الصوت المباشر.');
       }
     } else {
       if (micStream) micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
       micActive = false;
-      btn.textContent = '🎙️ المايك مغلق';
+      btn.textContent = '🎙️ فتح المايك';
       btn.classList.remove('active');
+      setVoiceStatus("🔇 الصوت الصوتي: متوقف");
+
+      Object.keys(peerConnections).forEach(cleanupPeer);
+      remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
+      remove(ref(db, `js_dan_live_room/voice_signals/${clientId}`)).catch(() => {});
     }
   };
+
+  onValue(peersRef, (snap) => {
+    if (!micActive || !snap.exists()) return;
+    const peers = snap.val();
+    const otherIds = Object.keys(peers).filter(id => id !== clientId);
+    if (otherIds.length === 0) {
+      setVoiceStatus("📡 المايك شغال (بانتظار شخص آخر يفتح المايك)");
+    }
+    otherIds.forEach(remoteId => {
+      if (!peerConnections[remoteId] && clientId > remoteId) {
+        createPeerConnection(remoteId, true);
+      }
+    });
+  });
+
+  const mySignalsRef = ref(db, `js_dan_live_room/voice_signals/${clientId}`);
+  onChildAdded(mySignalsRef, (snap) => {
+    const senderId = snap.key;
+    if (!senderId || senderId === clientId) return;
+
+    const senderRef = ref(db, `js_dan_live_room/voice_signals/${clientId}/${senderId}`);
+    onValue(senderRef, async (sSnap) => {
+      if (!sSnap.exists() || !micActive) return;
+      const sig = sSnap.val();
+      const pc = createPeerConnection(senderId, false);
+
+      if (sig.offer && !pc.currentRemoteDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(sig.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await set(ref(db, `js_dan_live_room/voice_signals/${senderId}/${clientId}/answer`), {
+          type: pc.localDescription.type,
+          sdp: pc.localDescription.sdp
+        });
+      }
+
+      if (sig.answer && pc.signalingState === "have-local-offer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(sig.answer));
+      }
+
+      if (sig.candidates && pc.remoteDescription) {
+        Object.values(sig.candidates).forEach(c => {
+          pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        });
+      }
+    });
+  });
 
   // 1. صراحة أو جرأة
   const seatAngles = [0, 60, 120, 180, 240, 300];
@@ -775,7 +999,7 @@
       el.classList.toggle('picked', Number(roomState.pickedSeat) === k);
       el.querySelector('.avatar').textContent = holder ? '😎' : '💺';
       el.querySelector('.seat-label').textContent = holder
-        ? (holder.id === clientId ? 'أنت' : holder.label)
+        ? (holder.id === clientId ? `${holder.label} (أنت)` : holder.label)
         : ('مقعد ' + (k + 1));
     }
 
@@ -804,10 +1028,10 @@
     seatA.classList.toggle('taken-a', Boolean(pkSeats.a));
     seatB.classList.toggle('taken-b', Boolean(pkSeats.b));
     document.getElementById('pkLabelA').textContent = pkSeats.a
-      ? (pkSeats.a.id === clientId ? 'أنت (الطرف 1)' : pkSeats.a.label)
+      ? (pkSeats.a.id === clientId ? `${pkSeats.a.label} (أنت)` : pkSeats.a.label)
       : 'مقعد الطرف 1';
     document.getElementById('pkLabelB').textContent = pkSeats.b
-      ? (pkSeats.b.id === clientId ? 'أنت (الطرف 2)' : pkSeats.b.label)
+      ? (pkSeats.b.id === clientId ? `${pkSeats.b.label} (أنت)` : pkSeats.b.label)
       : 'مقعد الطرف 2';
 
     document.getElementById('pkChallengeText').textContent = roomState.pkChallenge || "";
@@ -820,7 +1044,7 @@
     chairEl.classList.toggle('active-seat', Boolean(holder));
     document.getElementById('hotIcon').textContent = holder ? '😎' : '🪑';
     document.getElementById('hotName').textContent = holder
-      ? (holder.id === clientId ? 'أنت في الكرسي' : holder.label)
+      ? (holder.id === clientId ? `${holder.label} (أنت)` : holder.label)
       : 'كليكي للجلوس';
 
     const skips = Number(roomState.skipsLeft ?? 1);
@@ -851,7 +1075,7 @@
       const stHolder = stSeats[k];
       el.classList.toggle('on-air', Boolean(stHolder));
       document.getElementById('st-label-' + k).textContent = stHolder
-        ? (stHolder.id === clientId ? '🎙️ أنت على الهواء' : `🎙️ ${stHolder.label}`)
+        ? (stHolder.id === clientId ? `🎙️ ${stHolder.label} (أنت)` : `🎙️ ${stHolder.label}`)
         : `مقعد ${k + 1} (فاضي)`;
     }
     document.getElementById('stageTopic').textContent = roomState.stageTopic || "";
@@ -876,6 +1100,11 @@
     if (val && val.emoji && (!val.ts || val.ts >= startTs - 1000)) {
       showFloatingEmoji(val.emoji);
     }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
+    remove(ref(db, `js_dan_live_room/voice_signals/${clientId}`)).catch(() => {});
   });
 </script>
 
