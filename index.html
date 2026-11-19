@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>JS DAN - غرف الصوت والتحدي</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  body {
+    background: radial-gradient(circle at top, #230d42 0%, #090314 100%);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* الهيدر */
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .brand { font-weight: bold; font-size: 15px; color: #ff2e93; }
+  .mic-btn {
+    background: #2b144d;
+    color: #fff;
+    border: 1px solid #ff2e93;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .mic-btn.active {
+    background: #00c853;
+    border-color: #00c853;
+  }
+
+  /* شريط التنقل بين الغرف الخمس */
+  .nav-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ddd;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .tab-btn.active {
+    background: linear-gradient(45deg, #ff2e93, #7928ca);
+    color: #fff;
+    border-color: transparent;
+  }
+
+  /* المحتوى العام */
+  .screen { display: none; flex: 1; flex-direction: column; justify-content: space-between; padding: 14px; gap: 12px; }
+  .screen.active { display: flex; }
+
+  .box {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    padding: 12px;
+    text-align: center;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+  .card-msg { font-size: 14px; line-height: 1.5; }
+  .btns-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+
+  .action-btn {
+    background: linear-gradient(45deg, #00c6ff, #0072ff);
+    color: #fff;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .action-btn.dare { background: linear-gradient(45deg, #ff0844, #ffb199); }
+  .action-btn.pk-btn { background: linear-gradient(45deg, #ff2e93, #ff9900); }
+  .action-btn.gold-btn { background: linear-gradient(45deg, #f7971e, #ffd200); color: #111; }
+  .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .timer-pill {
+    background: rgba(255, 46, 147, 0.2);
+    border: 1px solid #ff2e93;
+    padding: 4px 10px;
+    border-radius: 12px;
+    color: #ffd700;
+    font-size: 12px;
+    font-weight: bold;
+  }
+
+  /* 1. غرفة صراحة وجرأة */
+  .circle-wrap {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    margin: 8px auto;
+    border-radius: 50%;
+    border: 2px dashed rgba(255, 46, 147, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .seat { position: absolute; width: 60px; text-align: center; cursor: pointer; }
+  .avatar {
+    width: 44px; height: 44px; margin: 0 auto 4px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1); border: 2px solid #666;
+    display: flex; justify-content: center; align-items: center; font-size: 18px;
+  }
+  .seat.taken .avatar { border-color: #00f2fe; background: linear-gradient(45deg, #ff2e93, #7928ca); }
+  .seat.picked .avatar { border-color: #ffd700; box-shadow: 0 0 18px #ffd700; transform: scale(1.12); }
+  .seat-label { font-size: 10px; background: rgba(0, 0, 0, 0.65); padding: 2px 6px; border-radius: 8px; }
+
+  .p1 { top: -22px; left: 50%; transform: translateX(-50%); }
+  .p2 { top: 34px; right: -14px; }
+  .p3 { bottom: 34px; right: -14px; }
+  .p4 { bottom: -22px; left: 50%; transform: translateX(-50%); }
+  .p5 { bottom: 34px; left: -14px; }
+  .p6 { top: 34px; left: -14px; }
+
+  .bottle-box { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 5; }
+  .bottle { width: 30px; height: 80px; transition: transform 3.5s cubic-bezier(0.15, 0.85, 0.25, 1); }
+
+  /* 2. غرفة PK */
+  .pk-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 14px; }
+  .pk-bar { width: 100%; height: 15px; border-radius: 10px; background: #ff2e93; overflow: hidden; display: flex; }
+  .pk-left-fill { width: 50%; height: 100%; background: #00e5ff; transition: width 0.35s ease; }
+  .pk-scores { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; }
+  .pk-seats { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+  .pk-seat {
+    background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 14px; padding: 12px 8px; text-align: center; cursor: pointer;
+  }
+  .pk-seat.taken-a { border-color: #00e5ff; background: rgba(0, 229, 255, 0.16); }
+  .pk-seat.taken-b { border-color: #ff2e93; background: rgba(255, 46, 147, 0.18); }
+  .vs-badge { font-weight: 900; font-size: 16px; color: #ffd700; }
+  .pk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .gift-btn { padding: 9px; border-radius: 12px; border: none; font-weight: bold; font-size: 12px; color: #fff; cursor: pointer; }
+  .gift-a { background: linear-gradient(45deg, #00b0ff, #00e5ff); color: #090314; }
+  .gift-b { background: linear-gradient(45deg, #ff2e93, #ff6d00); }
+
+  /* 3. كرسي الاعتراف (Hot Seat) */
+  .hot-chair {
+    width: 120px; height: 120px; margin: 4px auto; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 8, 68, 0.35), rgba(255, 153, 0, 0.1));
+    border: 3px solid #ff5722; box-shadow: 0 0 22px rgba(255, 87, 34, 0.5);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    cursor: pointer; text-align: center;
+  }
+  .hot-chair.active-seat { border-color: #ffd700; box-shadow: 0 0 28px #ffd700; }
+
+  /* 4. الفوازير والسرعة */
+  .quiz-players { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .q-player {
+    background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px; padding: 8px; text-align: center; font-size: 12px; cursor: pointer;
+  }
+  .q-player.active { border-color: #00e5ff; background: rgba(0, 229, 255, 0.15); }
+
+  /* 5. المايك المفتوح */
+  .stage-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stage-seat {
+    background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px; padding: 12px; text-align: center; cursor: pointer;
+  }
+  .stage-seat.on-air { border-color: #00c853; box-shadow: 0 0 15px rgba(0, 200, 83, 0.4); background: rgba(0, 200, 83, 0.12); }
+  .react-bar { display: flex; justify-content: space-around; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 16px; }
+  .react-btn { background: none; border: none; font-size: 24px; cursor: pointer; transition: transform 0.15s; }
+  .react-btn:active { transform: scale(1.35); }
+  .floating-emoji {
+    position: fixed; bottom: 80px; font-size: 28px; pointer-events: none;
+    animation: floatUp 1.8s ease-out forwards; z-index: 99;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-180px) scale(1.5); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div class="brand">🎙️ JS DAN LIVE</div>
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ المايك مغلق</button>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" id="tab-td" onclick="switchTab('td')">🍾 صراحة وجرأة</button>
+    <button class="tab-btn" id="tab-pk" onclick="switchTab('pk')">⚔️ غرفة PK</button>
+    <button class="tab-btn" id="tab-hot" onclick="switchTab('hot')">🔥 كرسي الاعتراف</button>
+    <button class="tab-btn" id="tab-quiz" onclick="switchTab('quiz')">⚡ الفوازير</button>
+    <button class="tab-btn" id="tab-mic" onclick="switchTab('mic')">🌟 المايك المفتوح</button>
+  </div>
+
+  <!-- 1. شاشة صراحة أو جرأة -->
+  <div class="screen active" id="screen-td">
+    <div class="circle-wrap">
+      <div class="seat p1" id="td-seat-0" onclick="pickTdSeat(0)"><div class="avatar">💺</div><div class="seat-label">مقعد 1</div></div>
+      <div class="seat p2" id="td-seat-1" onclick="pickTdSeat(1)"><div class="avatar">💺</div><div class="seat-label">مقعد 2</div></div>
+      <div class="seat p3" id="td-seat-2" onclick="pickTdSeat(2)"><div class="avatar">💺</div><div class="seat-label">مقعد 3</div></div>
+      <div class="seat p4" id="td-seat-3" onclick="pickTdSeat(3)"><div class="avatar">💺</div><div class="seat-label">مقعد 4</div></div>
+      <div class="seat p5" id="td-seat-4" onclick="pickTdSeat(4)"><div class="avatar">💺</div><div class="seat-label">مقعد 5</div></div>
+      <div class="seat p6" id="td-seat-5" onclick="pickTdSeat(5)"><div class="avatar">💺</div><div class="seat-label">مقعد 6</div></div>
+
+      <div class="bottle-box" onclick="spinBottle()">
+        <svg class="bottle" id="bottle" viewBox="0 0 64 160" fill="none">
+          <rect x="24" y="4" width="16" height="12" rx="3" fill="#FFD700"/>
+          <path d="M26 16H38V45L48 65V145C48 151.627 42.6274 157 36 157H28C21.3726 157 16 151.627 16 145V65L26 45V16Z" fill="url(#g1)"/>
+          <defs>
+            <linearGradient id="g1" x1="32" y1="16" x2="32" y2="157" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#00F2FE"/>
+              <stop offset="1" stop-color="#FF2E93"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-msg" id="tdMsg">اختار مقعد باش تجلس، ومن بعد كليكي على القرعة باش تدور!</div>
+      <div class="btns-row" id="tdChoices" style="display:none;">
+        <button class="action-btn" onclick="showPrompt('truth')">صراحة 😇</button>
+        <button class="action-btn dare" onclick="showPrompt('dare')">جرأة 😈</button>
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <button class="action-btn" onclick="spinBottle()">🔄 دور القرعة</button>
+    </div>
+  </div>
+
+  <!-- 2. شاشة غرفة PK -->
+  <div class="screen" id="screen-pk">
+    <div class="box">
+      <div class="pk-header">
+        <span>🔥 مواجهة PK مباشرة</span>
+        <span class="timer-pill" id="pkTimer">01:00</span>
+      </div>
+      <div class="pk-bar"><div class="pk-left-fill" id="pkBarA"></div></div>
+      <div class="pk-scores">
+        <span id="scoreA">🔵 الطرف 1: 100</span>
+        <span id="scoreB">🔴 الطرف 2: 100</span>
+      </div>
+      <div class="pk-seats">
+        <div class="pk-seat" id="pk-seat-a" onclick="takePkSeat('a')">
+          <div style="font-size:20px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="pkLabelA">مقعد الطرف 1</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="pk-seat" id="pk-seat-b" onclick="takePkSeat('b')">
+          <div style="font-size:20px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="pkLabelB">مقعد الطرف 2</div>
+        </div>
+      </div>
+      <div class="pk-actions">
+        <button class="gift-btn gift-a" onclick="boostSide('a', 25)">⚡ دعم الطرف 1 (+25)</button>
+        <button class="gift-btn gift-b" onclick="boostSide('b', 25)">🔥 دعم الطرف 2 (+25)</button>
+      </div>
+      <div class="card">
+        <div class="card-msg" id="pkChallengeText">كليكي على "تحدي PK جديد" باش يخرج تحدي بين الطرفين!</div>
+      </div>
+      <div class="btns-row">
+        <button class="action-btn pk-btn" onclick="newPkChallenge()">🎲 تحدي PK</button>
+        <button class="action-btn" onclick="startPkTimer()">⏱️ بدء الجولة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. شاشة كرسي الاعتراف (Hot Seat) -->
+  <div class="screen" id="screen-hot">
+    <div class="box">
+      <div class="pk-header">
+        <span>🔥 كرسي الاعتراف السخون</span>
+        <span class="timer-pill" id="hotTimer">01:00</span>
+      </div>
+
+      <div class="hot-chair" id="hotChair" onclick="toggleHotChair()">
+        <div style="font-size:28px;" id="hotIcon">🪑</div>
+        <div style="font-size:12px; font-weight:bold;" id="hotName">كليكي للجلوس</div>
+      </div>
+
+      <div style="text-align:center; font-size:12px; color:#ffd700;">
+        النقاط: <span id="hotPoints">0</span> | حق التخطي: <span id="skipCount">1</span>
+      </div>
+
+      <div class="card">
+        <div class="card-msg" id="hotQuestion">جلس في الكرسي وابدأ الجولة باش يجيو الأسئلة النارية!</div>
+      </div>
+
+      <div class="btns-row">
+        <button class="action-btn pk-btn" onclick="startHotSeat()">🔥 بدء الأسئلة</button>
+        <button class="action-btn" onclick="nextHotQuestion(true)">✅ جاوبت (+10)</button>
+        <button class="action-btn dare" id="skipBtn" onclick="skipHotQuestion()">⏭️ تخطي (1)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. شاشة الفوازير والسرعة -->
+  <div class="screen" id="screen-quiz">
+    <div class="box">
+      <div class="pk-header">
+        <span>⚡ تحدي الفوازير والسرعة</span>
+        <span class="timer-pill">جولة سريعة</span>
+      </div>
+
+      <div class="quiz-players">
+        <div class="q-player active" id="qp-0" onclick="selectQuizPlayer(0)">
+          <div>😎 أنت</div>
+          <div style="color:#ffd700; font-weight:bold;" id="qscore-0">0 نقط</div>
+        </div>
+        <div class="q-player" id="qp-1" onclick="selectQuizPlayer(1)">
+          <div>🎙️ ضيف 1</div>
+          <div style="color:#ffd700; font-weight:bold;" id="qscore-1">0 نقط</div>
+        </div>
+        <div class="q-player" id="qp-2" onclick="selectQuizPlayer(2)">
+          <div>🎙️ ضيف 2</div>
+          <div style="color:#ffd700; font-weight:bold;" id="qscore-2">0 نقط</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-msg" id="quizPrompt">كليكي على "سؤال / تحدي جديد" واللي يجاوب الأول في المايك ياخد النقطة!</div>
+        <div style="font-size:12px; color:#00e5ff; display:none;" id="quizAnswer"></div>
+      </div>
+
+      <div class="btns-row">
+        <button class="action-btn" onclick="newQuiz()">🎲 تحدي جديد</button>
+        <button class="action-btn gold-btn" onclick="revealQuizAnswer()">👁️ إظهار الجواب</button>
+        <button class="action-btn pk-btn" onclick="awardQuizPoint()">🏆 نقطة للمحدد</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. شاشة المايك المفتوح (Open Mic) -->
+  <div class="screen" id="screen-mic">
+    <div class="box">
+      <div class="pk-header">
+        <span>🌟 سهرة المايك المفتوح</span>
+        <span class="timer-pill" id="stageTimer">00:45</span>
+      </div>
+
+      <div class="stage-grid">
+        <div class="stage-seat" id="st-0" onclick="takeStageSeat(0)">
+          <div style="font-size:22px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="st-label-0">مقعد 1 (فاضي)</div>
+        </div>
+        <div class="stage-seat" id="st-1" onclick="takeStageSeat(1)">
+          <div style="font-size:22px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="st-label-1">مقعد 2 (فاضي)</div>
+        </div>
+        <div class="stage-seat" id="st-2" onclick="takeStageSeat(2)">
+          <div style="font-size:22px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="st-label-2">مقعد 3 (فاضي)</div>
+        </div>
+        <div class="stage-seat" id="st-3" onclick="takeStageSeat(3)">
+          <div style="font-size:22px;">🎤</div>
+          <div style="font-weight:bold; font-size:12px;" id="st-label-3">مقعد 4 (فاضي)</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-msg" id="stageTopic">اختار مقعد على المنصة وابدأ فقرتك (غناء، نكتة، شعر، أو قصة)!</div>
+      </div>
+
+      <div class="btns-row">
+        <button class="action-btn pk-btn" onclick="randomStageTopic()">🎭 فكرة فقرة</button>
+        <button class="action-btn" onclick="startStageTimer()">⏱️ مؤقت 45 ثانية</button>
+      </div>
+
+      <div class="react-bar">
+        <button class="react-btn" onclick="sendReaction('👏')">👏</button>
+        <button class="react-btn" onclick="sendReaction('❤️')">❤️</button>
+        <button class="react-btn" onclick="sendReaction('😂')">😂</button>
+        <button class="react-btn" onclick="sendReaction('🔥')">🔥</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let micStream = null;
+  let micActive = false;
+
+  // التنقل بين الغرف الخمس
+  function switchTab(tab) {
+    const tabs = ['td', 'pk', 'hot', 'quiz', 'mic'];
+    tabs.forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+      document.getElementById('screen-' + t).classList.toggle('active', t === tab);
+    });
+  }
+
+  // الميكروفون
+  async function toggleMic() {
+    const btn = document.getElementById('micBtn');
+    if (!micActive) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micActive = true;
+        btn.textContent = '🎙️ المايك شغال';
+        btn.classList.add('active');
+      } catch (e) {
+        alert('عفاك وافق على صلاحية الميكروفون باش يخدم الصوت.');
+      }
+    } else {
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      micActive = false;
+      btn.textContent = '🎙️ المايك مغلق';
+      btn.classList.remove('active');
+    }
+  }
+
+  // 1. صراحة أو جرأة
+  let tdSeat = -1, rot = 0, spinning = false;
+  const seatAngles = [0, 60, 120, 180, 240, 300];
+  const truths = [
+    "شنو هي أكبر كذبة كذبتيها على داركم؟",
+    "شكون أكثر واحد كيعجبك هضرتو هنا؟",
+    "شنو هو أكثر موقف محرج وقع ليك؟",
+    "واش عمرك ندمتي على شي قرار خديتيه بالزربة؟"
+  ];
+  const dares = [
+    "غني مقطع من أغنية بصوت عالي!",
+    "هضر باللهجة المصرية 30 ثانية بلا ما تضحك!",
+    "قول نكتة وخلينا نسمعوها!",
+    "مدح كل واحد جالس معاك في الغرفة بجملة!"
+  ];
+
+  function pickTdSeat(i) {
+    for (let k = 0; k < 6; k++) {
+      const el = document.getElementById('td-seat-' + k);
+      el.classList.remove('taken');
+      el.querySelector('.avatar').textContent = '💺';
+      el.querySelector('.seat-label').textContent = 'مقعد ' + (k + 1);
+    }
+    if (tdSeat === i) { tdSeat = -1; return; }
+    tdSeat = i;
+    const chosen = document.getElementById('td-seat-' + i);
+    chosen.classList.add('taken');
+    chosen.querySelector('.avatar').textContent = '😎';
+    chosen.querySelector('.seat-label').textContent = 'أنت';
+  }
+
+  function spinBottle() {
+    if (spinning) return;
+    spinning = true;
+    document.getElementById('tdChoices').style.display = 'none';
+    document.getElementById('tdMsg').textContent = 'القرعة كدور...';
+    document.querySelectorAll('.seat').forEach(s => s.classList.remove('picked'));
+
+    const target = Math.floor(Math.random() * 6);
+    rot = rot - (rot % 360) + (360 * 4) + seatAngles[target];
+    document.getElementById('bottle').style.transform = `rotate(${rot}deg)`;
+
+    setTimeout(() => {
+      spinning = false;
+      const targetEl = document.getElementById('td-seat-' + target);
+      targetEl.classList.add('picked');
+      const name = targetEl.querySelector('.seat-label').textContent;
+      document.getElementById('tdMsg').textContent = `القرعة وقفات على ${name}! اختار:`;
+      document.getElementById('tdChoices').style.display = 'flex';
+    }, 3500);
+  }
+
+  function showPrompt(type) {
+    const arr = type === 'truth' ? truths : dares;
+    const pick = arr[Math.floor(Math.random() * arr.length)];
+    document.getElementById('tdMsg').textContent = (type === 'truth' ? '😇 صراحة: ' : '😈 جرأة: ') + pick;
+    document.getElementById('tdChoices').style.display = 'none';
+  }
+
+  // 2. غرفة PK
+  let ptsA = 100, ptsB = 100, pkSeatHolder = null, pkInterval = null, pkSeconds = 60;
+  const pkChallenges = [
+    "🎤 تحدي الغناء: كل طرف يغني مقطع 15 ثانية والجمهور يختار الأفضل!",
+    "😂 تحدي الضحك: الطرف 1 يحاول يضحك الطرف 2 في 20 ثانية!",
+    "⚡ تحدي السرعة: قول 5 كلمات تبدا بحرف 'س' في 10 ثواني!",
+    "🎭 تحدي التمثيل الصوتي: مثل دور معلق كورة على هدف في الدقيقة 90!"
+  ];
+
+  function updatePkBar() {
+    const total = Math.max(1, ptsA + ptsB);
+    const pctA = Math.min(90, Math.max(10, Math.round((ptsA / total) * 100)));
+    document.getElementById('pkBarA').style.width = pctA + '%';
+    document.getElementById('scoreA').textContent = `🔵 الطرف 1: ${ptsA}`;
+    document.getElementById('scoreB').textContent = `🔴 الطرف 2: ${ptsB}`;
+  }
+
+  function takePkSeat(side) {
+    const seatA = document.getElementById('pk-seat-a');
+    const seatB = document.getElementById('pk-seat-b');
+    seatA.classList.remove('taken-a');
+    seatB.classList.remove('taken-b');
+    document.getElementById('pkLabelA').textContent = 'مقعد الطرف 1';
+    document.getElementById('pkLabelB').textContent = 'مقعد الطرف 2';
+
+    if (pkSeatHolder === side) { pkSeatHolder = null; return; }
+    pkSeatHolder = side;
+    if (side === 'a') {
+      seatA.classList.add('taken-a');
+      document.getElementById('pkLabelA').textContent = 'أنت (الطرف 1)';
+    } else {
+      seatB.classList.add('taken-b');
+      document.getElementById('pkLabelB').textContent = 'أنت (الطرف 2)';
+    }
+  }
+
+  function boostSide(side, amount) {
+    if (side === 'a') ptsA += amount; else ptsB += amount;
+    updatePkBar();
+  }
+
+  function newPkChallenge() {
+    document.getElementById('pkChallengeText').textContent = pkChallenges[Math.floor(Math.random() * pkChallenges.length)];
+  }
+
+  function startPkTimer() {
+    clearInterval(pkInterval);
+    pkSeconds = 60; ptsA = 100; ptsB = 100;
+    updatePkBar(); newPkChallenge();
+    pkInterval = setInterval(() => {
+      pkSeconds--;
+      document.getElementById('pkTimer').textContent = `00:${String(pkSeconds).padStart(2, '0')}`;
+      if (pkSeconds <= 0) {
+        clearInterval(pkInterval);
+        const winner = ptsA >= ptsB ? 'الطرف 1 🔵' : 'الطرف 2 🔴';
+        document.getElementById('pkChallengeText').textContent = `🏆 سالات الجولة! الفائز هو: ${winner}`;
+      }
+    }, 1000);
+  }
+  updatePkBar();
+
+  // 3. كرسي الاعتراف (Hot Seat)
+  let onHotChair = false, hotPoints = 0, skipsLeft = 1, hotInterval = null, hotSeconds = 60;
+  const hotQuestions = [
+    "شكون آخر واحد صيفطتي ليه ميساج وشنو قلتي ليه؟",
+    "شنو هي الصفة اللي فيك وبغيتي تبدلها؟",
+    "إلا ربحتي مليون درهم دابا، شنو أول حاجة غادي تشري؟",
+    "شكون أقرب صديق ليك كتحكي ليه أسرارك؟",
+    "شنو هو أكثر حلم بغيتي تحققو هاد العام؟",
+    "واش عمرك بكيتي على شي فيلم ولا أغنية؟"
+  ];
+
+  function toggleHotChair() {
+    onHotChair = !onHotChair;
+    const chair = document.getElementById('hotChair');
+    chair.classList.toggle('active-seat', onHotChair);
+    document.getElementById('hotIcon').textContent = onHotChair ? '😎' : '🪑';
+    document.getElementById('hotName').textContent = onHotChair ? 'أنت في الكرسي' : 'كليكي للجلوس';
+  }
+
+  function startHotSeat() {
+    if (!onHotChair) toggleHotChair();
+    clearInterval(hotInterval);
+    hotSeconds = 60; hotPoints = 0; skipsLeft = 1;
+    document.getElementById('hotPoints').textContent = hotPoints;
+    document.getElementById('skipCount').textContent = skipsLeft;
+    document.getElementById('skipBtn').disabled = false;
+    nextHotQuestion(false);
+
+    hotInterval = setInterval(() => {
+      hotSeconds--;
+      document.getElementById('hotTimer').textContent = `00:${String(hotSeconds).padStart(2, '0')}`;
+      if (hotSeconds <= 0) {
+        clearInterval(hotInterval);
+        document.getElementById('hotQuestion').textContent = `⏱️ سالا الوقت! جمعتي ${hotPoints} نقطة على كرسي الاعتراف!`;
+      }
+    }, 1000);
+  }
+
+  function nextHotQuestion(addPts) {
+    if (addPts) {
+      hotPoints += 10;
+      document.getElementById('hotPoints').textContent = hotPoints;
+    }
+    const q = hotQuestions[Math.floor(Math.random() * hotQuestions.length)];
+    document.getElementById('hotQuestion').textContent = '🔥 سؤال: ' + q;
+  }
+
+  function skipHotQuestion() {
+    if (skipsLeft <= 0) return;
+    skipsLeft--;
+    document.getElementById('skipCount').textContent = skipsLeft;
+    document.getElementById('skipBtn').disabled = true;
+    nextHotQuestion(false);
+  }
+
+  // 4. الفوازير والسرعة
+  let selectedQuizPlayer = 0;
+  const quizScores = [0, 0, 0];
+  let currentAnswer = "";
+  const quizzes = [
+    { q: "🧩 لغز: حاجة كتمشي بلا رجلين وكتبكي بلا عينين، شنو هي؟", a: "السحابة ☁️" },
+    { q: "⚡ سرعة: قول 4 مدن مغربية كيبداو بحرف الميم في 7 ثواني!", a: "مراكش، مكناس، المحمدية، ميدلت" },
+    { q: "🧩 لغز: كل ما كتاخد منو كيكبر، وكل ما كتزيد فيه كيصغار؟", a: "الحفرة 🕳️" },
+    { q: "🎶 موسيقى: كمل الأغنية أو غني جملة فيها كلمة 'الليل'!", a: "تحدي مفتوح بالصوت 🎤" },
+    { q: "🧩 لغز: شنو هي الحاجة اللي كتكتب وما كتقراش؟", a: "القلم ✏️" }
+  ];
+
+  function selectQuizPlayer(idx) {
+    selectedQuizPlayer = idx;
+    for (let i = 0; i < 3; i++) {
+      document.getElementById('qp-' + i).classList.toggle('active', i === idx);
+    }
+  }
+
+  function newQuiz() {
+    const item = quizzes[Math.floor(Math.random() * quizzes.length)];
+    document.getElementById('quizPrompt').textContent = item.q;
+    currentAnswer = item.a;
+    const ansEl = document.getElementById('quizAnswer');
+    ansEl.style.display = 'none';
+    ansEl.textContent = 'الجواب: ' + currentAnswer;
+  }
+
+  function revealQuizAnswer() {
+    if (!currentAnswer) return;
+    document.getElementById('quizAnswer').style.display = 'block';
+  }
+
+  function awardQuizPoint() {
+    quizScores[selectedQuizPlayer] += 1;
+    document.getElementById('qscore-' + selectedQuizPlayer).textContent = quizScores[selectedQuizPlayer] + ' نقط';
+    newQuiz();
+  }
+
+  // 5. المايك المفتوح (Open Mic)
+  let stageSeat = -1, stageInterval = null, stageSeconds = 45;
+  const stageTopics = [
+    "🎵 غني لينا مقطع من أغنيتك المفضلة!",
+    "😂 عاود لينا أطرف موقف وقع ليك فحياتك!",
+    "🎙️ دير راسك مذيع أخبار وعطينا نشرة جوية مضحكة!",
+    "✍️ قول شي بيت شعري أو خاطرة زوينة!"
+  ];
+
+  function takeStageSeat(i) {
+    for (let k = 0; k < 4; k++) {
+      const el = document.getElementById('st-' + k);
+      el.classList.remove('on-air');
+      document.getElementById('st-label-' + k).textContent = `مقعد ${k + 1} (فاضي)`;
+    }
+    if (stageSeat === i) { stageSeat = -1; return; }
+    stageSeat = i;
+    document.getElementById('st-' + i).classList.add('on-air');
+    document.getElementById('st-label-' + i).textContent = '🎙️ أنت على الهواء';
+  }
+
+  function randomStageTopic() {
+    document.getElementById('stageTopic').textContent = stageTopics[Math.floor(Math.random() * stageTopics.length)];
+  }
+
+  function startStageTimer() {
+    clearInterval(stageInterval);
+    stageSeconds = 45;
+    stageInterval = setInterval(() => {
+      stageSeconds--;
+      document.getElementById('stageTimer').textContent = `00:${String(stageSeconds).padStart(2, '0')}`;
+      if (stageSeconds <= 0) {
+        clearInterval(stageInterval);
+        document.getElementById('stageTopic').textContent = '👏 سالات فقرتك! صفقوا عليه!';
+        sendReaction('👏');
+      }
+    }, 1000);
+  }
+
+  function sendReaction(emoji) {
+    const el = document.createElement('div');
+    el.className = 'floating-emoji';
+    el.textContent = emoji;
+    el.style.left = (20 + Math.random() * 60) + '%';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1800);
+  }
+</script>
+
+</body>
+</html>
