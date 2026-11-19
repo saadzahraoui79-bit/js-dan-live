@@ -29,6 +29,14 @@
   .sync-status { font-size: 10px; color: #00e5ff; font-weight: bold; }
   .voice-status { font-size: 10px; color: #ffd700; font-weight: bold; line-height: 1.4; }
 
+  .top-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+
   .nick-bar, .admin-bar {
     display: flex;
     gap: 6px;
@@ -137,6 +145,55 @@
   .mic-btn.muted-by-admin {
     background: #d32f2f;
     border-color: #ff5252;
+  }
+  .ext-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #00e5ff;
+    border: 1px solid rgba(0, 229, 255, 0.45);
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 10px;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  /* صندوق الغرفة الصوتية المدمجة */
+  .voice-room-box {
+    display: none;
+    margin: 10px 12px 0;
+    background: rgba(0, 229, 255, 0.08);
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    border-radius: 14px;
+    padding: 10px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .voice-room-box.visible { display: flex; }
+  .voice-room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #00e5ff;
+  }
+  .close-voice-btn {
+    background: #ff1744;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .voice-iframe {
+    width: 100%;
+    height: 240px;
+    border: none;
+    border-radius: 10px;
+    background: #090314;
   }
 
   /* شريط التنقل بين الغرف الخمس */
@@ -320,7 +377,18 @@
       <div class="sync-status" id="syncStatus">🔄 جاري الاتصال...</div>
       <div class="voice-status" id="voiceStatus">🔇 الصوت داخل التطبيق: متوقف</div>
     </div>
-    <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ فتح المايك</button>
+    <div class="top-actions">
+      <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ فتح المايك</button>
+      <a class="ext-btn" href="https://saadzahraoui79-bit.github.io/js-dan-live/" target="_blank" rel="noopener noreferrer">🌐 فتح في المتصفح</a>
+    </div>
+  </div>
+
+  <div class="voice-room-box" id="voiceRoomBox">
+    <div class="voice-room-header">
+      <span>🔊 الغرفة الصوتية المدمجة (JS DAN LIVE)</span>
+      <button class="close-voice-btn" onclick="closeEmbeddedVoice()">إغلاق</button>
+    </div>
+    <iframe class="voice-iframe" id="voiceIframe" allow="microphone; autoplay; display-capture"></iframe>
   </div>
 
   <div class="nick-bar">
@@ -544,6 +612,7 @@
   };
 
   const ADMIN_SECRET = "1234";
+  const JITSI_ROOM = "jsdanlive";
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
@@ -566,6 +635,7 @@
 
   let micStream = null;
   let micActive = false;
+  let embeddedVoiceOpen = false;
   const peerConnections = {};
 
   let roomState = {
@@ -792,6 +862,7 @@
       if (micStream) micStream.getTracks().forEach(t => t.stop());
       micStream = null;
       micActive = false;
+      window.closeEmbeddedVoice();
       Object.keys(peerConnections).forEach(cleanupPeer);
       remove(ref(db, `js_dan_live_room/online_users/${clientId}`)).catch(() => {});
       remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
@@ -814,6 +885,9 @@
         track.enabled = micActive && !isMutedByAdmin;
       });
     }
+    if (isMutedByAdmin && embeddedVoiceOpen) {
+      window.closeEmbeddedVoice();
+    }
     updateMicButtonUI();
     renderAdminPanel();
   });
@@ -826,13 +900,36 @@
       btn.textContent = "🔇 ميوت من الأدمن";
       btn.classList.add("muted-by-admin");
       setVoiceStatus("🔇 دار ليك الأدمن ميوت (صوتك مقطوع)");
-    } else if (micActive) {
+    } else if (micActive || embeddedVoiceOpen) {
       btn.textContent = "🎙️ المايك شغال";
       btn.classList.add("active");
     } else {
       btn.textContent = "🎙️ فتح المايك";
     }
   }
+
+  function openEmbeddedVoiceRoom() {
+    const box = document.getElementById("voiceRoomBox");
+    const iframe = document.getElementById("voiceIframe");
+    const encodedName = encodeURIComponent(clientLabel || "JS DAN");
+    iframe.src = `https://meet.jit.si/${JITSI_ROOM}#userInfo.displayName="${encodedName}"&config.startWithVideoMuted=true&config.prejoinPageEnabled=false`;
+    box.classList.add("visible");
+    embeddedVoiceOpen = true;
+    updateMicButtonUI();
+    setVoiceStatus("🔊 الغرفة الصوتية مفتوحة داخل التطبيق");
+  }
+
+  window.closeEmbeddedVoice = function() {
+    const box = document.getElementById("voiceRoomBox");
+    const iframe = document.getElementById("voiceIframe");
+    iframe.src = "";
+    box.classList.remove("visible");
+    embeddedVoiceOpen = false;
+    if (!micActive && !isMutedByAdmin) {
+      setVoiceStatus("🔇 الصوت داخل التطبيق: متوقف");
+    }
+    updateMicButtonUI();
+  };
 
   function updateMyLabelInSeats() {
     const seats = roomState.tdSeats || {};
@@ -866,6 +963,9 @@
     updateMyLabelInSeats();
     if (micActive) {
       set(ref(db, `js_dan_live_room/voice_peers/${clientId}/name`), clientLabel).catch(() => {});
+    }
+    if (embeddedVoiceOpen) {
+      openEmbeddedVoiceRoom();
     }
   };
 
@@ -968,28 +1068,35 @@
       return;
     }
 
-    if (!micActive) {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setVoiceStatus("⚠️ المتصفح الداخلي للتطبيق لا يدعم الميكروفون مباشرة");
-        return;
-      }
-      setVoiceStatus("⏳ جاري طلب إذن الميكروفون داخل التطبيق...");
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true }
-        });
-        micActive = true;
-        micStream.getAudioTracks().forEach(t => { t.enabled = !isMutedByAdmin; });
-        updateMicButtonUI();
-        setVoiceStatus("📡 المايك شغال (بانتظار صديق آخر يفتح المايك)");
+    if (embeddedVoiceOpen) {
+      window.closeEmbeddedVoice();
+      return;
+    }
 
-        await set(ref(db, `js_dan_live_room/voice_peers/${clientId}`), {
-          id: clientId,
-          name: clientLabel,
-          ts: Date.now()
-        });
-      } catch (e) {
-        setVoiceStatus("⚠️ الميكروفون مرفوض أو غير مسموح به في التطبيق/الجهاز");
+    if (!micActive) {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        setVoiceStatus("⏳ جاري تجربة الميكروفون داخل التطبيق...");
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true }
+          });
+          micActive = true;
+          micStream.getAudioTracks().forEach(t => { t.enabled = !isMutedByAdmin; });
+          updateMicButtonUI();
+          setVoiceStatus("📡 المايك شغال (بانتظار صديق آخر يفتح المايك)");
+
+          await set(ref(db, `js_dan_live_room/voice_peers/${clientId}`), {
+            id: clientId,
+            name: clientLabel,
+            ts: Date.now()
+          });
+          return;
+        } catch (e) {
+          openEmbeddedVoiceRoom();
+          return;
+        }
+      } else {
+        openEmbeddedVoiceRoom();
       }
     } else {
       if (micStream) micStream.getTracks().forEach(t => t.stop());
