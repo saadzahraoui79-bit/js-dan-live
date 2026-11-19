@@ -15,6 +15,27 @@
     overflow-x: hidden;
   }
 
+  /* إشعار دخلة المطور */
+  .entry-banner {
+    display: none;
+    position: fixed;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    background: linear-gradient(45deg, #ff2e93, #7928ca);
+    color: #fff;
+    border: 2px solid #ffd700;
+    border-radius: 16px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: bold;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.55);
+    text-align: center;
+    max-width: 90%;
+  }
+  .entry-banner.visible { display: block; }
+
   /* الهيدر */
   .top-bar {
     display: flex;
@@ -371,6 +392,8 @@
 </head>
 <body>
 
+  <div class="entry-banner" id="entryBanner">🎉 لقد دخل المطور JS DAN</div>
+
   <div class="top-bar">
     <div>
       <div class="brand">🎙️ JS DAN LIVE</div>
@@ -631,6 +654,16 @@
   let latestOnlineUsers = {};
   let lastSeatAnnounceTs = 0;
 
+  function showEntryBanner(text = "🎉 لقد دخل المطور JS DAN") {
+    const banner = document.getElementById("entryBanner");
+    if (!banner) return;
+    banner.textContent = text;
+    banner.classList.add("visible");
+    setTimeout(() => {
+      banner.classList.remove("visible");
+    }, 3500);
+  }
+
   function speakDeveloperOnSeat() {
     const now = Date.now();
     if (now - lastSeatAnnounceTs < 2500) return;
@@ -639,15 +672,45 @@
     const isDev = isAdmin || (clientLabel || "").trim().toLowerCase() === "js dan";
     if (!isDev) return;
 
-    if (!("speechSynthesis" in window)) return;
+    const phrase = "لقد دخل المطور JS DAN";
+    showEntryBanner("🎉 " + phrase);
+
+    if (!("speechSynthesis" in window)) {
+      setVoiceStatus("📣 بان إشعار الدخلية (الجهاز لا يدعم النطق الصوتي)");
+      return;
+    }
+
     try {
+      window.speechSynthesis.resume();
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance("لقد دخل المطور JS DAN");
-      utter.lang = "ar-SA";
+      const utter = new SpeechSynthesisUtterance(phrase);
+      const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+      const arabicVoice = voices.find(v => (v.lang || "").toLowerCase().startsWith("ar"));
+      if (arabicVoice) {
+        utter.voice = arabicVoice;
+        utter.lang = arabicVoice.lang;
+      } else {
+        utter.lang = "ar-SA";
+      }
       utter.rate = 0.95;
       utter.pitch = 1;
+      utter.volume = 1;
+      utter.onstart = () => {
+        setVoiceStatus("🔊 جاري نطق الدخلية: لقد دخل المطور JS DAN");
+      };
+      utter.onerror = () => {
+        setVoiceStatus("📣 بان إشعار الدخلية (تحقق من صوت TTS في التليفون)");
+      };
       window.speechSynthesis.speak(utter);
-    } catch (e) {}
+    } catch (e) {
+      setVoiceStatus("📣 بان إشعار الدخلية");
+    }
+  }
+
+  if ("speechSynthesis" in window && window.speechSynthesis.addEventListener) {
+    window.speechSynthesis.addEventListener("voiceschanged", () => {
+      window.speechSynthesis.getVoices();
+    });
   }
 
   document.getElementById("nickInput").value = clientLabel;
