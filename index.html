@@ -25,6 +25,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
   .brand { font-weight: bold; font-size: 15px; color: #ff2e93; }
+  .sync-status { font-size: 11px; color: #00e5ff; font-weight: bold; }
   .mic-btn {
     background: #2b144d;
     color: #fff;
@@ -213,7 +214,10 @@
 <body>
 
   <div class="top-bar">
-    <div class="brand">🎙️ JS DAN LIVE</div>
+    <div>
+      <div class="brand">🎙️ JS DAN LIVE</div>
+      <div class="sync-status" id="syncStatus">🔄 جاري الاتصال...</div>
+    </div>
     <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ المايك مغلق</button>
   </div>
 
@@ -338,7 +342,7 @@
 
       <div class="quiz-players">
         <div class="q-player active" id="qp-0" onclick="selectQuizPlayer(0)">
-          <div>😎 أنت</div>
+          <div>😎 لاعب 1</div>
           <div style="color:#ffd700; font-weight:bold;" id="qscore-0">0 نقط</div>
         </div>
         <div class="q-player" id="qp-1" onclick="selectQuizPlayer(1)">
@@ -409,21 +413,73 @@
     </div>
   </div>
 
-<script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, set, onValue, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    databaseURL: "https://js-dan-live-default-rtdb.firebaseio.com/"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const roomRef = ref(db, "js_dan_live_room");
+  const reactionsRef = ref(db, "js_dan_live_room/reactions");
+
+  const clientId = "user_" + Math.random().toString(36).substring(2, 8);
+  const clientLabel = "لاعب " + clientId.slice(-3);
+
   let micStream = null;
   let micActive = false;
 
+  // حالة الغرفة المشتركة
+  let roomState = {
+    tdSeats: {},
+    pickedSeat: -1,
+    bottleAngle: 0,
+    spinId: "",
+    tdMsg: "اختار مقعد باش تجلس، ومن بعد كليكي على القرعة باش تدور!",
+    showChoices: false,
+    ptsA: 100,
+    ptsB: 100,
+    pkSeats: {},
+    pkChallenge: 'كليكي على "تحدي PK جديد" باش يخرج تحدي بين الطرفين!',
+    pkSeconds: 60,
+    hotHolder: null,
+    hotPoints: 0,
+    skipsLeft: 1,
+    hotQuestion: "جلس في الكرسي وابدأ الجولة باش يجيو الأسئلة النارية!",
+    hotSeconds: 60,
+    selectedQuizPlayer: 0,
+    quizScores: [0, 0, 0],
+    quizPrompt: 'كليكي على "سؤال / تحدي جديد" واللي يجاوب الأول في المايك ياخد النقطة!',
+    quizAnswer: "",
+    quizAnswerVisible: false,
+    stageSeats: {},
+    stageTopic: "اختار مقعد على المنصة وابدأ فقرتك (غناء، نكتة، شعر، أو قصة)!",
+    stageSeconds: 45
+  };
+
+  let lastSpinId = "";
+  let pkInterval = null;
+  let hotInterval = null;
+  let stageInterval = null;
+
+  function saveState() {
+    set(roomRef, roomState).catch(() => {});
+  }
+
   // التنقل بين الغرف الخمس
-  function switchTab(tab) {
+  window.switchTab = function(tab) {
     const tabs = ['td', 'pk', 'hot', 'quiz', 'mic'];
     tabs.forEach(t => {
       document.getElementById('tab-' + t).classList.toggle('active', t === tab);
       document.getElementById('screen-' + t).classList.toggle('active', t === tab);
     });
-  }
+  };
 
   // الميكروفون
-  async function toggleMic() {
+  window.toggleMic = async function() {
     const btn = document.getElementById('micBtn');
     if (!micActive) {
       try {
@@ -440,10 +496,9 @@
       btn.textContent = '🎙️ المايك مغلق';
       btn.classList.remove('active');
     }
-  }
+  };
 
   // 1. صراحة أو جرأة
-  let tdSeat = -1, rot = 0, spinning = false;
   const seatAngles = [0, 60, 120, 180, 240, 300];
   const truths = [
     "شنو هي أكبر كذبة كذبتيها على داركم؟",
@@ -458,51 +513,51 @@
     "مدح كل واحد جالس معاك في الغرفة بجملة!"
   ];
 
-  function pickTdSeat(i) {
-    for (let k = 0; k < 6; k++) {
-      const el = document.getElementById('td-seat-' + k);
-      el.classList.remove('taken');
-      el.querySelector('.avatar').textContent = '💺';
-      el.querySelector('.seat-label').textContent = 'مقعد ' + (k + 1);
+  window.pickTdSeat = function(i) {
+    const seats = roomState.tdSeats || {};
+    if (seats[i] && seats[i].id === clientId) {
+      delete seats[i];
+    } else {
+      Object.keys(seats).forEach(k => {
+        if (seats[k] && seats[k].id === clientId) delete seats[k];
+      });
+      seats[i] = { id: clientId, label: clientLabel };
     }
-    if (tdSeat === i) { tdSeat = -1; return; }
-    tdSeat = i;
-    const chosen = document.getElementById('td-seat-' + i);
-    chosen.classList.add('taken');
-    chosen.querySelector('.avatar').textContent = '😎';
-    chosen.querySelector('.seat-label').textContent = 'أنت';
-  }
+    roomState.tdSeats = seats;
+    saveState();
+  };
 
-  function spinBottle() {
-    if (spinning) return;
-    spinning = true;
-    document.getElementById('tdChoices').style.display = 'none';
-    document.getElementById('tdMsg').textContent = 'القرعة كدور...';
-    document.querySelectorAll('.seat').forEach(s => s.classList.remove('picked'));
-
+  window.spinBottle = function() {
     const target = Math.floor(Math.random() * 6);
-    rot = rot - (rot % 360) + (360 * 4) + seatAngles[target];
-    document.getElementById('bottle').style.transform = `rotate(${rot}deg)`;
+    const currentRot = Number(roomState.bottleAngle || 0);
+    const nextRot = currentRot - (currentRot % 360) + (360 * 4) + seatAngles[target];
+
+    roomState.spinId = Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+    roomState.bottleAngle = nextRot;
+    roomState.pickedSeat = target;
+    roomState.showChoices = false;
+    roomState.tdMsg = "القرعة كدور...";
+    saveState();
+
+    const seats = roomState.tdSeats || {};
+    const name = (seats[target] && seats[target].label) || ("مقعد " + (target + 1));
 
     setTimeout(() => {
-      spinning = false;
-      const targetEl = document.getElementById('td-seat-' + target);
-      targetEl.classList.add('picked');
-      const name = targetEl.querySelector('.seat-label').textContent;
-      document.getElementById('tdMsg').textContent = `القرعة وقفات على ${name}! اختار:`;
-      document.getElementById('tdChoices').style.display = 'flex';
+      roomState.tdMsg = `القرعة وقفات على ${name}! اختار:`;
+      roomState.showChoices = true;
+      saveState();
     }, 3500);
-  }
+  };
 
-  function showPrompt(type) {
+  window.showPrompt = function(type) {
     const arr = type === 'truth' ? truths : dares;
     const pick = arr[Math.floor(Math.random() * arr.length)];
-    document.getElementById('tdMsg').textContent = (type === 'truth' ? '😇 صراحة: ' : '😈 جرأة: ') + pick;
-    document.getElementById('tdChoices').style.display = 'none';
-  }
+    roomState.tdMsg = (type === 'truth' ? '😇 صراحة: ' : '😈 جرأة: ') + pick;
+    roomState.showChoices = false;
+    saveState();
+  };
 
   // 2. غرفة PK
-  let ptsA = 100, ptsB = 100, pkSeatHolder = null, pkInterval = null, pkSeconds = 60;
   const pkChallenges = [
     "🎤 تحدي الغناء: كل طرف يغني مقطع 15 ثانية والجمهور يختار الأفضل!",
     "😂 تحدي الضحك: الطرف 1 يحاول يضحك الطرف 2 في 20 ثانية!",
@@ -510,60 +565,51 @@
     "🎭 تحدي التمثيل الصوتي: مثل دور معلق كورة على هدف في الدقيقة 90!"
   ];
 
-  function updatePkBar() {
-    const total = Math.max(1, ptsA + ptsB);
-    const pctA = Math.min(90, Math.max(10, Math.round((ptsA / total) * 100)));
-    document.getElementById('pkBarA').style.width = pctA + '%';
-    document.getElementById('scoreA').textContent = `🔵 الطرف 1: ${ptsA}`;
-    document.getElementById('scoreB').textContent = `🔴 الطرف 2: ${ptsB}`;
-  }
-
-  function takePkSeat(side) {
-    const seatA = document.getElementById('pk-seat-a');
-    const seatB = document.getElementById('pk-seat-b');
-    seatA.classList.remove('taken-a');
-    seatB.classList.remove('taken-b');
-    document.getElementById('pkLabelA').textContent = 'مقعد الطرف 1';
-    document.getElementById('pkLabelB').textContent = 'مقعد الطرف 2';
-
-    if (pkSeatHolder === side) { pkSeatHolder = null; return; }
-    pkSeatHolder = side;
-    if (side === 'a') {
-      seatA.classList.add('taken-a');
-      document.getElementById('pkLabelA').textContent = 'أنت (الطرف 1)';
+  window.takePkSeat = function(side) {
+    const pkSeats = roomState.pkSeats || {};
+    if (pkSeats[side] && pkSeats[side].id === clientId) {
+      delete pkSeats[side];
     } else {
-      seatB.classList.add('taken-b');
-      document.getElementById('pkLabelB').textContent = 'أنت (الطرف 2)';
+      Object.keys(pkSeats).forEach(k => {
+        if (pkSeats[k] && pkSeats[k].id === clientId) delete pkSeats[k];
+      });
+      pkSeats[side] = { id: clientId, label: clientLabel };
     }
-  }
+    roomState.pkSeats = pkSeats;
+    saveState();
+  };
 
-  function boostSide(side, amount) {
-    if (side === 'a') ptsA += amount; else ptsB += amount;
-    updatePkBar();
-  }
+  window.boostSide = function(side, amount) {
+    if (side === 'a') roomState.ptsA = Number(roomState.ptsA || 100) + amount;
+    else roomState.ptsB = Number(roomState.ptsB || 100) + amount;
+    saveState();
+  };
 
-  function newPkChallenge() {
-    document.getElementById('pkChallengeText').textContent = pkChallenges[Math.floor(Math.random() * pkChallenges.length)];
-  }
+  window.newPkChallenge = function() {
+    roomState.pkChallenge = pkChallenges[Math.floor(Math.random() * pkChallenges.length)];
+    saveState();
+  };
 
-  function startPkTimer() {
+  window.startPkTimer = function() {
     clearInterval(pkInterval);
-    pkSeconds = 60; ptsA = 100; ptsB = 100;
-    updatePkBar(); newPkChallenge();
+    roomState.pkSeconds = 60;
+    roomState.ptsA = 100;
+    roomState.ptsB = 100;
+    roomState.pkChallenge = pkChallenges[Math.floor(Math.random() * pkChallenges.length)];
+    saveState();
+
     pkInterval = setInterval(() => {
-      pkSeconds--;
-      document.getElementById('pkTimer').textContent = `00:${String(pkSeconds).padStart(2, '0')}`;
-      if (pkSeconds <= 0) {
+      roomState.pkSeconds = Math.max(0, Number(roomState.pkSeconds || 0) - 1);
+      if (roomState.pkSeconds <= 0) {
         clearInterval(pkInterval);
-        const winner = ptsA >= ptsB ? 'الطرف 1 🔵' : 'الطرف 2 🔴';
-        document.getElementById('pkChallengeText').textContent = `🏆 سالات الجولة! الفائز هو: ${winner}`;
+        const winner = (roomState.ptsA || 0) >= (roomState.ptsB || 0) ? 'الطرف 1 🔵' : 'الطرف 2 🔴';
+        roomState.pkChallenge = `🏆 سالات الجولة! الفائز هو: ${winner}`;
       }
+      saveState();
     }, 1000);
-  }
-  updatePkBar();
+  };
 
   // 3. كرسي الاعتراف (Hot Seat)
-  let onHotChair = false, hotPoints = 0, skipsLeft = 1, hotInterval = null, hotSeconds = 60;
   const hotQuestions = [
     "شكون آخر واحد صيفطتي ليه ميساج وشنو قلتي ليه؟",
     "شنو هي الصفة اللي فيك وبغيتي تبدلها؟",
@@ -573,54 +619,52 @@
     "واش عمرك بكيتي على شي فيلم ولا أغنية؟"
   ];
 
-  function toggleHotChair() {
-    onHotChair = !onHotChair;
-    const chair = document.getElementById('hotChair');
-    chair.classList.toggle('active-seat', onHotChair);
-    document.getElementById('hotIcon').textContent = onHotChair ? '😎' : '🪑';
-    document.getElementById('hotName').textContent = onHotChair ? 'أنت في الكرسي' : 'كليكي للجلوس';
-  }
+  window.toggleHotChair = function() {
+    if (roomState.hotHolder && roomState.hotHolder.id === clientId) {
+      roomState.hotHolder = null;
+    } else {
+      roomState.hotHolder = { id: clientId, label: clientLabel };
+    }
+    saveState();
+  };
 
-  function startHotSeat() {
-    if (!onHotChair) toggleHotChair();
+  window.startHotSeat = function() {
+    if (!roomState.hotHolder) {
+      roomState.hotHolder = { id: clientId, label: clientLabel };
+    }
     clearInterval(hotInterval);
-    hotSeconds = 60; hotPoints = 0; skipsLeft = 1;
-    document.getElementById('hotPoints').textContent = hotPoints;
-    document.getElementById('skipCount').textContent = skipsLeft;
-    document.getElementById('skipBtn').disabled = false;
-    nextHotQuestion(false);
+    roomState.hotSeconds = 60;
+    roomState.hotPoints = 0;
+    roomState.skipsLeft = 1;
+    roomState.hotQuestion = '🔥 سؤال: ' + hotQuestions[Math.floor(Math.random() * hotQuestions.length)];
+    saveState();
 
     hotInterval = setInterval(() => {
-      hotSeconds--;
-      document.getElementById('hotTimer').textContent = `00:${String(hotSeconds).padStart(2, '0')}`;
-      if (hotSeconds <= 0) {
+      roomState.hotSeconds = Math.max(0, Number(roomState.hotSeconds || 0) - 1);
+      if (roomState.hotSeconds <= 0) {
         clearInterval(hotInterval);
-        document.getElementById('hotQuestion').textContent = `⏱️ سالا الوقت! جمعتي ${hotPoints} نقطة على كرسي الاعتراف!`;
+        roomState.hotQuestion = `⏱️ سالا الوقت! جمعتي ${roomState.hotPoints || 0} نقطة على كرسي الاعتراف!`;
       }
+      saveState();
     }, 1000);
-  }
+  };
 
-  function nextHotQuestion(addPts) {
+  window.nextHotQuestion = function(addPts) {
     if (addPts) {
-      hotPoints += 10;
-      document.getElementById('hotPoints').textContent = hotPoints;
+      roomState.hotPoints = Number(roomState.hotPoints || 0) + 10;
     }
-    const q = hotQuestions[Math.floor(Math.random() * hotQuestions.length)];
-    document.getElementById('hotQuestion').textContent = '🔥 سؤال: ' + q;
-  }
+    roomState.hotQuestion = '🔥 سؤال: ' + hotQuestions[Math.floor(Math.random() * hotQuestions.length)];
+    saveState();
+  };
 
-  function skipHotQuestion() {
-    if (skipsLeft <= 0) return;
-    skipsLeft--;
-    document.getElementById('skipCount').textContent = skipsLeft;
-    document.getElementById('skipBtn').disabled = true;
-    nextHotQuestion(false);
-  }
+  window.skipHotQuestion = function() {
+    if ((roomState.skipsLeft || 0) <= 0) return;
+    roomState.skipsLeft = Number(roomState.skipsLeft) - 1;
+    roomState.hotQuestion = '🔥 سؤال: ' + hotQuestions[Math.floor(Math.random() * hotQuestions.length)];
+    saveState();
+  };
 
   // 4. الفوازير والسرعة
-  let selectedQuizPlayer = 0;
-  const quizScores = [0, 0, 0];
-  let currentAnswer = "";
   const quizzes = [
     { q: "🧩 لغز: حاجة كتمشي بلا رجلين وكتبكي بلا عينين، شنو هي؟", a: "السحابة ☁️" },
     { q: "⚡ سرعة: قول 4 مدن مغربية كيبداو بحرف الميم في 7 ثواني!", a: "مراكش، مكناس، المحمدية، ميدلت" },
@@ -629,35 +673,39 @@
     { q: "🧩 لغز: شنو هي الحاجة اللي كتكتب وما كتقراش؟", a: "القلم ✏️" }
   ];
 
-  function selectQuizPlayer(idx) {
-    selectedQuizPlayer = idx;
-    for (let i = 0; i < 3; i++) {
-      document.getElementById('qp-' + i).classList.toggle('active', i === idx);
-    }
-  }
+  window.selectQuizPlayer = function(idx) {
+    roomState.selectedQuizPlayer = idx;
+    saveState();
+  };
 
-  function newQuiz() {
+  window.newQuiz = function() {
     const item = quizzes[Math.floor(Math.random() * quizzes.length)];
-    document.getElementById('quizPrompt').textContent = item.q;
-    currentAnswer = item.a;
-    const ansEl = document.getElementById('quizAnswer');
-    ansEl.style.display = 'none';
-    ansEl.textContent = 'الجواب: ' + currentAnswer;
-  }
+    roomState.quizPrompt = item.q;
+    roomState.quizAnswer = item.a;
+    roomState.quizAnswerVisible = false;
+    saveState();
+  };
 
-  function revealQuizAnswer() {
-    if (!currentAnswer) return;
-    document.getElementById('quizAnswer').style.display = 'block';
-  }
+  window.revealQuizAnswer = function() {
+    if (!roomState.quizAnswer) return;
+    roomState.quizAnswerVisible = true;
+    saveState();
+  };
 
-  function awardQuizPoint() {
-    quizScores[selectedQuizPlayer] += 1;
-    document.getElementById('qscore-' + selectedQuizPlayer).textContent = quizScores[selectedQuizPlayer] + ' نقط';
-    newQuiz();
-  }
+  window.awardQuizPoint = function() {
+    const idx = Number(roomState.selectedQuizPlayer || 0);
+    const scores = Array.isArray(roomState.quizScores) ? [...roomState.quizScores] : [0, 0, 0];
+    scores[idx] = Number(scores[idx] || 0) + 1;
+    roomState.quizScores = scores;
+
+    const item = quizzes[Math.floor(Math.random() * quizzes.length)];
+    roomState.quizPrompt = item.q;
+    roomState.quizAnswer = item.a;
+    roomState.quizAnswerVisible = false;
+    saveState();
+  };
 
   // 5. المايك المفتوح (Open Mic)
-  let stageSeat = -1, stageInterval = null, stageSeconds = 45;
   const stageTopics = [
     "🎵 غني لينا مقطع من أغنيتك المفضلة!",
     "😂 عاود لينا أطرف موقف وقع ليك فحياتك!",
@@ -665,37 +713,46 @@
     "✍️ قول شي بيت شعري أو خاطرة زوينة!"
   ];
 
-  function takeStageSeat(i) {
-    for (let k = 0; k < 4; k++) {
-      const el = document.getElementById('st-' + k);
-      el.classList.remove('on-air');
-      document.getElementById('st-label-' + k).textContent = `مقعد ${k + 1} (فاضي)`;
+  window.takeStageSeat = function(i) {
+    const seats = roomState.stageSeats || {};
+    if (seats[i] && seats[i].id === clientId) {
+      delete seats[i];
+    } else {
+      Object.keys(seats).forEach(k => {
+        if (seats[k] && seats[k].id === clientId) delete seats[k];
+      });
+      seats[i] = { id: clientId, label: clientLabel };
     }
-    if (stageSeat === i) { stageSeat = -1; return; }
-    stageSeat = i;
-    document.getElementById('st-' + i).classList.add('on-air');
-    document.getElementById('st-label-' + i).textContent = '🎙️ أنت على الهواء';
-  }
+    roomState.stageSeats = seats;
+    saveState();
+  };
 
-  function randomStageTopic() {
-    document.getElementById('stageTopic').textContent = stageTopics[Math.floor(Math.random() * stageTopics.length)];
-  }
+  window.randomStageTopic = function() {
+    roomState.stageTopic = stageTopics[Math.floor(Math.random() * stageTopics.length)];
+    saveState();
+  };
 
-  function startStageTimer() {
+  window.startStageTimer = function() {
     clearInterval(stageInterval);
-    stageSeconds = 45;
-    stageInterval = setInterval(() => {
-      stageSeconds--;
-      document.getElementById('stageTimer').textContent = `00:${String(stageSeconds).padStart(2, '0')}`;
-      if (stageSeconds <= 0) {
-        clearInterval(stageInterval);
-        document.getElementById('stageTopic').textContent = '👏 سالات فقرتك! صفقوا عليه!';
-        sendReaction('👏');
-      }
-    }, 1000);
-  }
+    roomState.stageSeconds = 45;
+    saveState();
 
-  function sendReaction(emoji) {
+    stageInterval = setInterval(() => {
+      roomState.stageSeconds = Math.max(0, Number(roomState.stageSeconds || 0) - 1);
+      if (roomState.stageSeconds <= 0) {
+        clearInterval(stageInterval);
+        roomState.stageTopic = '👏 سالات فقرتك! صفقوا عليه!';
+        window.sendReaction('👏');
+      }
+      saveState();
+    }, 1000);
+  };
+
+  window.sendReaction = function(emoji) {
+    push(reactionsRef, { emoji: emoji, ts: Date.now() }).catch(() => {});
+  };
+
+  function showFloatingEmoji(emoji) {
     const el = document.createElement('div');
     el.className = 'floating-emoji';
     el.textContent = emoji;
@@ -703,6 +760,123 @@
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1800);
   }
+
+  // رسم الواجهة عند وصول أي تحديث من Firebase
+  function renderUI(data) {
+    if (!data) return;
+    roomState = { ...roomState, ...data };
+
+    // 1. مقاعد صراحة وجرأة
+    const tdSeats = roomState.tdSeats || {};
+    for (let k = 0; k < 6; k++) {
+      const el = document.getElementById('td-seat-' + k);
+      const holder = tdSeats[k];
+      el.classList.toggle('taken', Boolean(holder));
+      el.classList.toggle('picked', Number(roomState.pickedSeat) === k);
+      el.querySelector('.avatar').textContent = holder ? '😎' : '💺';
+      el.querySelector('.seat-label').textContent = holder
+        ? (holder.id === clientId ? 'أنت' : holder.label)
+        : ('مقعد ' + (k + 1));
+    }
+
+    const bottleEl = document.getElementById('bottle');
+    if (roomState.spinId && roomState.spinId !== lastSpinId) {
+      lastSpinId = roomState.spinId;
+      bottleEl.style.transition = 'transform 3.5s cubic-bezier(0.15, 0.85, 0.25, 1)';
+    }
+    bottleEl.style.transform = `rotate(${Number(roomState.bottleAngle || 0)}deg)`;
+
+    document.getElementById('tdMsg').textContent = roomState.tdMsg || "";
+    document.getElementById('tdChoices').style.display = roomState.showChoices ? 'flex' : 'none';
+
+    // 2. غرفة PK
+    const ptsA = Number(roomState.ptsA ?? 100);
+    const ptsB = Number(roomState.ptsB ?? 100);
+    const total = Math.max(1, ptsA + ptsB);
+    const pctA = Math.min(90, Math.max(10, Math.round((ptsA / total) * 100)));
+    document.getElementById('pkBarA').style.width = pctA + '%';
+    document.getElementById('scoreA').textContent = `🔵 الطرف 1: ${ptsA}`;
+    document.getElementById('scoreB').textContent = `🔴 الطرف 2: ${ptsB}`;
+
+    const pkSeats = roomState.pkSeats || {};
+    const seatA = document.getElementById('pk-seat-a');
+    const seatB = document.getElementById('pk-seat-b');
+    seatA.classList.toggle('taken-a', Boolean(pkSeats.a));
+    seatB.classList.toggle('taken-b', Boolean(pkSeats.b));
+    document.getElementById('pkLabelA').textContent = pkSeats.a
+      ? (pkSeats.a.id === clientId ? 'أنت (الطرف 1)' : pkSeats.a.label)
+      : 'مقعد الطرف 1';
+    document.getElementById('pkLabelB').textContent = pkSeats.b
+      ? (pkSeats.b.id === clientId ? 'أنت (الطرف 2)' : pkSeats.b.label)
+      : 'مقعد الطرف 2';
+
+    document.getElementById('pkChallengeText').textContent = roomState.pkChallenge || "";
+    const pkSec = Number(roomState.pkSeconds ?? 60);
+    document.getElementById('pkTimer').textContent = `00:${String(pkSec).padStart(2, '0')}`;
+
+    // 3. كرسي الاعتراف
+    const holder = roomState.hotHolder;
+    const chairEl = document.getElementById('hotChair');
+    chairEl.classList.toggle('active-seat', Boolean(holder));
+    document.getElementById('hotIcon').textContent = holder ? '😎' : '🪑';
+    document.getElementById('hotName').textContent = holder
+      ? (holder.id === clientId ? 'أنت في الكرسي' : holder.label)
+      : 'كليكي للجلوس';
+
+    const skips = Number(roomState.skipsLeft ?? 1);
+    document.getElementById('hotPoints').textContent = Number(roomState.hotPoints ?? 0);
+    document.getElementById('skipCount').textContent = skips;
+    document.getElementById('skipBtn').textContent = `⏭️ تخطي (${skips})`;
+    document.getElementById('skipBtn').disabled = skips <= 0;
+    document.getElementById('hotQuestion').textContent = roomState.hotQuestion || "";
+    const hotSec = Number(roomState.hotSeconds ?? 60);
+    document.getElementById('hotTimer').textContent = `00:${String(hotSec).padStart(2, '0')}`;
+
+    // 4. الفوازير
+    const activeQp = Number(roomState.selectedQuizPlayer || 0);
+    const qScores = Array.isArray(roomState.quizScores) ? roomState.quizScores : [0, 0, 0];
+    for (let i = 0; i < 3; i++) {
+      document.getElementById('qp-' + i).classList.toggle('active', i === activeQp);
+      document.getElementById('qscore-' + i).textContent = `${Number(qScores[i] || 0)} نقط`;
+    }
+    document.getElementById('quizPrompt').textContent = roomState.quizPrompt || "";
+    const ansEl = document.getElementById('quizAnswer');
+    ansEl.textContent = 'الجواب: ' + (roomState.quizAnswer || "");
+    ansEl.style.display = roomState.quizAnswerVisible ? 'block' : 'none';
+
+    // 5. المايك المفتوح
+    const stSeats = roomState.stageSeats || {};
+    for (let k = 0; k < 4; k++) {
+      const el = document.getElementById('st-' + k);
+      const stHolder = stSeats[k];
+      el.classList.toggle('on-air', Boolean(stHolder));
+      document.getElementById('st-label-' + k).textContent = stHolder
+        ? (stHolder.id === clientId ? '🎙️ أنت على الهواء' : `🎙️ ${stHolder.label}`)
+        : `مقعد ${k + 1} (فاضي)`;
+    }
+    document.getElementById('stageTopic').textContent = roomState.stageTopic || "";
+    const stSec = Number(roomState.stageSeconds ?? 45);
+    document.getElementById('stageTimer').textContent = `00:${String(stSec).padStart(2, '0')}`;
+  }
+
+  onValue(roomRef, (snapshot) => {
+    document.getElementById('syncStatus').textContent = '🟢 متصل ومباشر';
+    if (snapshot.exists()) {
+      renderUI(snapshot.val());
+    } else {
+      saveState();
+    }
+  }, () => {
+    document.getElementById('syncStatus').textContent = '⚠️ تحقق من قواعد Firebase';
+  });
+
+  const startTs = Date.now();
+  onChildAdded(reactionsRef, (snap) => {
+    const val = snap.val();
+    if (val && val.emoji && (!val.ts || val.ts >= startTs - 1000)) {
+      showFloatingEmoji(val.emoji);
+    }
+  });
 </script>
 
 </body>
