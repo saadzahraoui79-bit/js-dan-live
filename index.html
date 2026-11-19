@@ -629,6 +629,26 @@
   let isKicked = false;
   let latestModState = { muted: {}, kicked: {} };
   let latestOnlineUsers = {};
+  let lastSeatAnnounceTs = 0;
+
+  function speakDeveloperOnSeat() {
+    const now = Date.now();
+    if (now - lastSeatAnnounceTs < 2500) return;
+    lastSeatAnnounceTs = now;
+
+    const isDev = isAdmin || (clientLabel || "").trim().toLowerCase() === "js dan";
+    if (!isDev) return;
+
+    if (!("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance("لقد دخل المطور JS DAN");
+      utter.lang = "ar-SA";
+      utter.rate = 0.95;
+      utter.pitch = 1;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  }
 
   document.getElementById("nickInput").value = clientLabel;
   applyAdminAuthUI();
@@ -1191,6 +1211,7 @@
         if (seats[k] && seats[k].id === clientId) delete seats[k];
       });
       seats[i] = { id: clientId, label: clientLabel };
+      speakDeveloperOnSeat();
     }
     roomState.tdSeats = seats;
     saveState();
@@ -1243,6 +1264,7 @@
         if (pkSeats[k] && pkSeats[k].id === clientId) delete pkSeats[k];
       });
       pkSeats[side] = { id: clientId, label: clientLabel };
+      speakDeveloperOnSeat();
     }
     roomState.pkSeats = pkSeats;
     saveState();
@@ -1293,6 +1315,7 @@
       roomState.hotHolder = null;
     } else {
       roomState.hotHolder = { id: clientId, label: clientLabel };
+      speakDeveloperOnSeat();
     }
     saveState();
   };
@@ -1300,6 +1323,7 @@
   window.startHotSeat = function() {
     if (!roomState.hotHolder) {
       roomState.hotHolder = { id: clientId, label: clientLabel };
+      speakDeveloperOnSeat();
     }
     clearInterval(hotInterval);
     roomState.hotSeconds = 60;
@@ -1391,6 +1415,7 @@
         if (seats[k] && seats[k].id === clientId) delete seats[k];
       });
       seats[i] = { id: clientId, label: clientLabel };
+      speakDeveloperOnSeat();
     }
     roomState.stageSeats = seats;
     saveState();
