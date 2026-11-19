@@ -27,9 +27,9 @@
   }
   .brand { font-weight: bold; font-size: 14px; color: #ff2e93; }
   .sync-status { font-size: 10px; color: #00e5ff; font-weight: bold; }
-  .voice-status { font-size: 10px; color: #ffd700; font-weight: bold; }
+  .voice-status { font-size: 10px; color: #ffd700; font-weight: bold; line-height: 1.4; }
 
-  .nick-bar {
+  .nick-bar, .admin-bar {
     display: flex;
     gap: 6px;
     padding: 8px 12px;
@@ -59,6 +59,65 @@
     cursor: pointer;
     flex-shrink: 0;
   }
+  .admin-btn {
+    background: linear-gradient(45deg, #ff2e93, #7928ca);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .admin-badge {
+    font-size: 11px;
+    font-weight: bold;
+    color: #00ff88;
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: rgba(0, 255, 136, 0.12);
+    border: 1px solid rgba(0, 255, 136, 0.35);
+  }
+
+  /* لوحة تحكم الأدمن */
+  .admin-panel {
+    display: none;
+    margin: 10px 12px 0;
+    background: rgba(255, 46, 147, 0.08);
+    border: 1px solid rgba(255, 46, 147, 0.35);
+    border-radius: 14px;
+    padding: 10px;
+    gap: 8px;
+    flex-direction: column;
+  }
+  .admin-panel.visible { display: flex; }
+  .admin-title { font-size: 12px; font-weight: bold; color: #ffd700; }
+  .admin-users-list { display: flex; flex-direction: column; gap: 6px; }
+  .admin-user-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 7px 10px;
+    border-radius: 10px;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .admin-user-name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-user-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .mini-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #fff;
+  }
+  .mute-btn { background: #ff9800; color: #111; }
+  .unmute-btn { background: #00c853; }
+  .kick-btn { background: #ff1744; }
 
   .mic-btn {
     background: #2b144d;
@@ -74,6 +133,10 @@
   .mic-btn.active {
     background: #00c853;
     border-color: #00c853;
+  }
+  .mic-btn.muted-by-admin {
+    background: #d32f2f;
+    border-color: #ff5252;
   }
 
   /* شريط التنقل بين الغرف الخمس */
@@ -255,7 +318,7 @@
     <div>
       <div class="brand">🎙️ JS DAN LIVE</div>
       <div class="sync-status" id="syncStatus">🔄 جاري الاتصال...</div>
-      <div class="voice-status" id="voiceStatus">🔇 الصوت الصوتي: متوقف</div>
+      <div class="voice-status" id="voiceStatus">🔇 الصوت داخل التطبيق: متوقف</div>
     </div>
     <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎙️ فتح المايك</button>
   </div>
@@ -263,6 +326,19 @@
   <div class="nick-bar">
     <input type="text" class="nick-input" id="nickInput" maxlength="16" placeholder="اكتب سميتك المستعارة هنا (مثلاً: JS DAN)...">
     <button class="save-nick-btn" onclick="saveNickname()">حفظ الاسم</button>
+  </div>
+
+  <div class="admin-bar" id="adminAuthBar">
+    <input type="password" class="nick-input" id="adminPassInput" maxlength="20" placeholder="رمز الأدمن (الافتراضي: 1234)">
+    <button class="admin-btn" onclick="loginAdmin()">🛡️ دخول أدمين</button>
+  </div>
+
+  <div class="admin-panel" id="adminPanel">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span class="admin-title">🛡️ تحكم الأدمن (ميوت / طرد)</span>
+      <span class="admin-badge">مفعّل</span>
+    </div>
+    <div class="admin-users-list" id="adminUsersList"></div>
   </div>
 
   <div id="remoteAudioContainer" style="display:none;"></div>
@@ -461,28 +537,37 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, set, onValue, push, onChildAdded, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, set, onValue, push, onChildAdded, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   const firebaseConfig = {
     databaseURL: "https://js-dan-live-default-rtdb.firebaseio.com/"
   };
+
+  const ADMIN_SECRET = "1234";
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const roomRef = ref(db, "js_dan_live_room");
   const reactionsRef = ref(db, "js_dan_live_room/reactions");
   const peersRef = ref(db, "js_dan_live_room/voice_peers");
+  const onlineUsersRef = ref(db, "js_dan_live_room/online_users");
+  const modRef = ref(db, "js_dan_live_room/moderation");
 
   const clientId = "user_" + Math.random().toString(36).substring(2, 8);
   let clientLabel = localStorage.getItem("js_dan_nickname") || "JS DAN";
+  let isAdmin = sessionStorage.getItem("js_dan_is_admin") === "1";
+  let isMutedByAdmin = false;
+  let isKicked = false;
+  let latestModState = { muted: {}, kicked: {} };
+  let latestOnlineUsers = {};
 
   document.getElementById("nickInput").value = clientLabel;
+  applyAdminAuthUI();
 
   let micStream = null;
   let micActive = false;
   const peerConnections = {};
 
-  // حالة الغرفة المشتركة
   let roomState = {
     tdSeats: {},
     pickedSeat: -1,
@@ -516,7 +601,237 @@
   let stageInterval = null;
 
   function saveState() {
-    set(roomRef, roomState).catch(() => {});
+    if (isKicked) return;
+    update(roomRef, {
+      tdSeats: roomState.tdSeats || {},
+      pickedSeat: roomState.pickedSeat,
+      bottleAngle: roomState.bottleAngle,
+      spinId: roomState.spinId,
+      tdMsg: roomState.tdMsg,
+      showChoices: roomState.showChoices,
+      ptsA: roomState.ptsA,
+      ptsB: roomState.ptsB,
+      pkSeats: roomState.pkSeats || {},
+      pkChallenge: roomState.pkChallenge,
+      pkSeconds: roomState.pkSeconds,
+      hotHolder: roomState.hotHolder || null,
+      hotPoints: roomState.hotPoints,
+      skipsLeft: roomState.skipsLeft,
+      hotQuestion: roomState.hotQuestion,
+      hotSeconds: roomState.hotSeconds,
+      selectedQuizPlayer: roomState.selectedQuizPlayer,
+      quizScores: roomState.quizScores,
+      quizPrompt: roomState.quizPrompt,
+      quizAnswer: roomState.quizAnswer,
+      quizAnswerVisible: roomState.quizAnswerVisible,
+      stageSeats: roomState.stageSeats || {},
+      stageTopic: roomState.stageTopic,
+      stageSeconds: roomState.stageSeconds
+    }).catch(() => {});
+  }
+
+  function registerPresence() {
+    if (isKicked) return;
+    set(ref(db, `js_dan_live_room/online_users/${clientId}`), {
+      id: clientId,
+      name: clientLabel,
+      ts: Date.now()
+    }).catch(() => {});
+  }
+  registerPresence();
+
+  function applyAdminAuthUI() {
+    document.getElementById("adminAuthBar").style.display = isAdmin ? "none" : "flex";
+    document.getElementById("adminPanel").classList.toggle("visible", isAdmin);
+    renderAdminPanel();
+  }
+
+  window.loginAdmin = function() {
+    const pass = document.getElementById("adminPassInput").value.trim();
+    if (pass === ADMIN_SECRET) {
+      isAdmin = true;
+      sessionStorage.setItem("js_dan_is_admin", "1");
+      document.getElementById("adminPassInput").value = "";
+      applyAdminAuthUI();
+    } else {
+      setVoiceStatus("⚠️ رمز الأدمن غير صحيح");
+    }
+  };
+
+  function collectAllKnownUsers() {
+    const map = {};
+    Object.values(latestOnlineUsers || {}).forEach(u => {
+      if (u && u.id && u.id !== clientId) map[u.id] = u.name || u.id;
+    });
+    Object.values(roomState.tdSeats || {}).forEach(u => {
+      if (u && u.id && u.id !== clientId) map[u.id] = u.label || u.id;
+    });
+    Object.values(roomState.pkSeats || {}).forEach(u => {
+      if (u && u.id && u.id !== clientId) map[u.id] = u.label || u.id;
+    });
+    Object.values(roomState.stageSeats || {}).forEach(u => {
+      if (u && u.id && u.id !== clientId) map[u.id] = u.label || u.id;
+    });
+    if (roomState.hotHolder && roomState.hotHolder.id && roomState.hotHolder.id !== clientId) {
+      map[roomState.hotHolder.id] = roomState.hotHolder.label || roomState.hotHolder.id;
+    }
+    return map;
+  }
+
+  function renderAdminPanel() {
+    if (!isAdmin) return;
+    const listEl = document.getElementById("adminUsersList");
+    const users = collectAllKnownUsers();
+    const ids = Object.keys(users);
+    const mutedMap = (latestModState && latestModState.muted) || {};
+
+    if (ids.length === 0) {
+      listEl.innerHTML = `<div style="font-size:11px; color:#ccc; text-align:center;">لا يوجد مشاركون آخرون متصلون دابا</div>`;
+      return;
+    }
+
+    listEl.innerHTML = "";
+    ids.forEach(uid => {
+      const muted = Boolean(mutedMap[uid]);
+      const row = document.createElement("div");
+      row.className = "admin-user-row";
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "admin-user-name";
+      nameDiv.textContent = `${muted ? "🔇 " : "👤 "}${users[uid]}`;
+
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "admin-user-actions";
+
+      const muteBtn = document.createElement("button");
+      muteBtn.className = `mini-btn ${muted ? "unmute-btn" : "mute-btn"}`;
+      muteBtn.textContent = muted ? "🔊 فك الميوت" : "🔇 ميوت";
+      muteBtn.onclick = () => window.adminToggleMute(uid, !muted);
+
+      const kickBtn = document.createElement("button");
+      kickBtn.className = "mini-btn kick-btn";
+      kickBtn.textContent = "🚫 طرد";
+      kickBtn.onclick = () => window.adminKickUser(uid);
+
+      actionsDiv.appendChild(muteBtn);
+      actionsDiv.appendChild(kickBtn);
+      row.appendChild(nameDiv);
+      row.appendChild(actionsDiv);
+      listEl.appendChild(row);
+    });
+  }
+
+  window.adminToggleMute = function(targetId, muteVal) {
+    if (!isAdmin || !targetId) return;
+    set(ref(db, `js_dan_live_room/moderation/muted/${targetId}`), muteVal ? true : null).catch(() => {});
+  };
+
+  window.adminKickUser = function(targetId) {
+    if (!isAdmin || !targetId) return;
+    set(ref(db, `js_dan_live_room/moderation/kicked/${targetId}`), true).catch(() => {});
+    remove(ref(db, `js_dan_live_room/online_users/${targetId}`)).catch(() => {});
+    remove(ref(db, `js_dan_live_room/voice_peers/${targetId}`)).catch(() => {});
+    remove(ref(db, `js_dan_live_room/voice_signals/${targetId}`)).catch(() => {});
+
+    let changed = false;
+    const seats = roomState.tdSeats || {};
+    Object.keys(seats).forEach(k => {
+      if (seats[k] && seats[k].id === targetId) { delete seats[k]; changed = true; }
+    });
+    const pkSeats = roomState.pkSeats || {};
+    Object.keys(pkSeats).forEach(k => {
+      if (pkSeats[k] && pkSeats[k].id === targetId) { delete pkSeats[k]; changed = true; }
+    });
+    if (roomState.hotHolder && roomState.hotHolder.id === targetId) {
+      roomState.hotHolder = null;
+      changed = true;
+    }
+    const stSeats = roomState.stageSeats || {};
+    Object.keys(stSeats).forEach(k => {
+      if (stSeats[k] && stSeats[k].id === targetId) { delete stSeats[k]; changed = true; }
+    });
+    if (changed) saveState();
+  };
+
+  function removeUserFromAllSeats(uid) {
+    let changed = false;
+    const seats = roomState.tdSeats || {};
+    Object.keys(seats).forEach(k => {
+      if (seats[k] && seats[k].id === uid) { delete seats[k]; changed = true; }
+    });
+    const pkSeats = roomState.pkSeats || {};
+    Object.keys(pkSeats).forEach(k => {
+      if (pkSeats[k] && pkSeats[k].id === uid) { delete pkSeats[k]; changed = true; }
+    });
+    if (roomState.hotHolder && roomState.hotHolder.id === uid) {
+      roomState.hotHolder = null;
+      changed = true;
+    }
+    const stSeats = roomState.stageSeats || {};
+    Object.keys(stSeats).forEach(k => {
+      if (stSeats[k] && stSeats[k].id === uid) { delete stSeats[k]; changed = true; }
+    });
+    if (changed) saveState();
+  }
+
+  onValue(onlineUsersRef, (snap) => {
+    latestOnlineUsers = snap.exists() ? snap.val() : {};
+    renderAdminPanel();
+  });
+
+  onValue(modRef, (snap) => {
+    const mod = snap.exists() ? snap.val() : {};
+    latestModState = {
+      muted: mod.muted || {},
+      kicked: mod.kicked || {}
+    };
+
+    const kickedNow = Boolean(latestModState.kicked && latestModState.kicked[clientId]);
+    if (kickedNow && !isKicked) {
+      isKicked = true;
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+      micActive = false;
+      Object.keys(peerConnections).forEach(cleanupPeer);
+      remove(ref(db, `js_dan_live_room/online_users/${clientId}`)).catch(() => {});
+      remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
+      remove(ref(db, `js_dan_live_room/voice_signals/${clientId}`)).catch(() => {});
+      removeUserFromAllSeats(clientId);
+      document.body.innerHTML = `
+        <div style="min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; background:#090314; color:#fff;">
+          <div style="font-size:42px; margin-bottom:12px;">🚫</div>
+          <div style="font-size:18px; font-weight:bold; color:#ff2e93; margin-bottom:8px;">تم طردك من الغرفة</div>
+          <div style="font-size:13px; color:#ccc;">قام الأدمن بإخراجك من JS DAN LIVE.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const mutedNow = Boolean(latestModState.muted && latestModState.muted[clientId]);
+    isMutedByAdmin = mutedNow;
+    if (micStream) {
+      micStream.getAudioTracks().forEach(track => {
+        track.enabled = micActive && !isMutedByAdmin;
+      });
+    }
+    updateMicButtonUI();
+    renderAdminPanel();
+  });
+
+  function updateMicButtonUI() {
+    const btn = document.getElementById("micBtn");
+    if (!btn) return;
+    btn.classList.remove("active", "muted-by-admin");
+    if (isMutedByAdmin) {
+      btn.textContent = "🔇 ميوت من الأدمن";
+      btn.classList.add("muted-by-admin");
+      setVoiceStatus("🔇 دار ليك الأدمن ميوت (صوتك مقطوع)");
+    } else if (micActive) {
+      btn.textContent = "🎙️ المايك شغال";
+      btn.classList.add("active");
+    } else {
+      btn.textContent = "🎙️ فتح المايك";
+    }
   }
 
   function updateMyLabelInSeats() {
@@ -540,6 +855,7 @@
     });
 
     saveState();
+    registerPresence();
   }
 
   window.saveNickname = function() {
@@ -553,7 +869,6 @@
     }
   };
 
-  // التنقل بين الغرف الخمس
   window.switchTab = function(tab) {
     const tabs = ['td', 'pk', 'hot', 'quiz', 'mic'];
     tabs.forEach(t => {
@@ -562,7 +877,6 @@
     });
   };
 
-  // الصوت المباشر عبر WebRTC + إشارات Firebase
   const rtcConfig = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -571,7 +885,8 @@
   };
 
   function setVoiceStatus(txt) {
-    document.getElementById("voiceStatus").textContent = txt;
+    const el = document.getElementById("voiceStatus");
+    if (el) el.textContent = txt;
   }
 
   function attachRemoteStream(remoteId, stream) {
@@ -586,7 +901,9 @@
     }
     audioEl.srcObject = stream;
     audioEl.play().catch(() => {});
-    setVoiceStatus("🔊 صوت مباشر شغال مع الغرفة");
+    if (!isMutedByAdmin) {
+      setVoiceStatus("🔊 صوت مباشر شغال داخل التطبيق");
+    }
   }
 
   function createPeerConnection(remoteId, isCaller) {
@@ -595,7 +912,10 @@
     peerConnections[remoteId] = pc;
 
     if (micStream) {
-      micStream.getTracks().forEach(track => pc.addTrack(track, micStream));
+      micStream.getTracks().forEach(track => {
+        track.enabled = micActive && !isMutedByAdmin;
+        pc.addTrack(track, micStream);
+      });
     }
 
     pc.ontrack = (event) => {
@@ -613,7 +933,7 @@
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") {
-        setVoiceStatus("🔊 متصل صوتياً مع مشاركين");
+        if (!isMutedByAdmin) setVoiceStatus("🔊 متصل صوتياً داخل التطبيق");
       } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         cleanupPeer(remoteId);
       }
@@ -642,16 +962,26 @@
   }
 
   window.toggleMic = async function() {
-    const btn = document.getElementById('micBtn');
+    if (isKicked) return;
+    if (isMutedByAdmin) {
+      setVoiceStatus("🔇 راك محطوط على ميوت من طرف الأدمن");
+      return;
+    }
+
     if (!micActive) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setVoiceStatus("⚠️ المتصفح الداخلي للتطبيق لا يدعم الميكروفون مباشرة");
+        return;
+      }
+      setVoiceStatus("⏳ جاري طلب إذن الميكروفون داخل التطبيق...");
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true }
         });
         micActive = true;
-        btn.textContent = '🎙️ المايك شغال';
-        btn.classList.add('active');
-        setVoiceStatus("📡 جاري البحث عن متصلين صوتيين...");
+        micStream.getAudioTracks().forEach(t => { t.enabled = !isMutedByAdmin; });
+        updateMicButtonUI();
+        setVoiceStatus("📡 المايك شغال (بانتظار صديق آخر يفتح المايك)");
 
         await set(ref(db, `js_dan_live_room/voice_peers/${clientId}`), {
           id: clientId,
@@ -659,15 +989,14 @@
           ts: Date.now()
         });
       } catch (e) {
-        alert('عفاك وافق على صلاحية الميكروفون باش يخدم الصوت المباشر.');
+        setVoiceStatus("⚠️ الميكروفون مرفوض أو غير مسموح به في التطبيق/الجهاز");
       }
     } else {
       if (micStream) micStream.getTracks().forEach(t => t.stop());
       micStream = null;
       micActive = false;
-      btn.textContent = '🎙️ فتح المايك';
-      btn.classList.remove('active');
-      setVoiceStatus("🔇 الصوت الصوتي: متوقف");
+      updateMicButtonUI();
+      setVoiceStatus("🔇 الصوت داخل التطبيق: متوقف");
 
       Object.keys(peerConnections).forEach(cleanupPeer);
       remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
@@ -676,13 +1005,22 @@
   };
 
   onValue(peersRef, (snap) => {
-    if (!micActive || !snap.exists()) return;
-    const peers = snap.val();
-    const otherIds = Object.keys(peers).filter(id => id !== clientId);
-    if (otherIds.length === 0) {
-      setVoiceStatus("📡 المايك شغال (بانتظار شخص آخر يفتح المايك)");
+    if (!micActive || isKicked) return;
+    const peers = snap.exists() ? snap.val() : {};
+    const activeIds = Object.keys(peers).filter(id => id !== clientId);
+
+    Object.keys(peerConnections).forEach(existingId => {
+      if (!activeIds.includes(existingId)) {
+        cleanupPeer(existingId);
+      }
+    });
+
+    if (activeIds.length === 0) {
+      if (!isMutedByAdmin) setVoiceStatus("📡 المايك شغال (بانتظار صديق آخر يفتح المايك)");
+      return;
     }
-    otherIds.forEach(remoteId => {
+
+    activeIds.forEach(remoteId => {
       if (!peerConnections[remoteId] && clientId > remoteId) {
         createPeerConnection(remoteId, true);
       }
@@ -692,11 +1030,11 @@
   const mySignalsRef = ref(db, `js_dan_live_room/voice_signals/${clientId}`);
   onChildAdded(mySignalsRef, (snap) => {
     const senderId = snap.key;
-    if (!senderId || senderId === clientId) return;
+    if (!senderId || senderId === clientId || isKicked) return;
 
     const senderRef = ref(db, `js_dan_live_room/voice_signals/${clientId}/${senderId}`);
     onValue(senderRef, async (sSnap) => {
-      if (!sSnap.exists() || !micActive) return;
+      if (!sSnap.exists() || !micActive || isKicked) return;
       const sig = sSnap.val();
       const pc = createPeerConnection(senderId, false);
 
@@ -973,6 +1311,7 @@
   };
 
   window.sendReaction = function(emoji) {
+    if (isKicked) return;
     push(reactionsRef, { emoji: emoji, ts: Date.now() }).catch(() => {});
   };
 
@@ -985,12 +1324,10 @@
     setTimeout(() => el.remove(), 1800);
   }
 
-  // رسم الواجهة عند وصول أي تحديث من Firebase
   function renderUI(data) {
     if (!data) return;
     roomState = { ...roomState, ...data };
 
-    // 1. مقاعد صراحة وجرأة
     const tdSeats = roomState.tdSeats || {};
     for (let k = 0; k < 6; k++) {
       const el = document.getElementById('td-seat-' + k);
@@ -1013,7 +1350,6 @@
     document.getElementById('tdMsg').textContent = roomState.tdMsg || "";
     document.getElementById('tdChoices').style.display = roomState.showChoices ? 'flex' : 'none';
 
-    // 2. غرفة PK
     const ptsA = Number(roomState.ptsA ?? 100);
     const ptsB = Number(roomState.ptsB ?? 100);
     const total = Math.max(1, ptsA + ptsB);
@@ -1038,7 +1374,6 @@
     const pkSec = Number(roomState.pkSeconds ?? 60);
     document.getElementById('pkTimer').textContent = `00:${String(pkSec).padStart(2, '0')}`;
 
-    // 3. كرسي الاعتراف
     const holder = roomState.hotHolder;
     const chairEl = document.getElementById('hotChair');
     chairEl.classList.toggle('active-seat', Boolean(holder));
@@ -1056,7 +1391,6 @@
     const hotSec = Number(roomState.hotSeconds ?? 60);
     document.getElementById('hotTimer').textContent = `00:${String(hotSec).padStart(2, '0')}`;
 
-    // 4. الفوازير
     const activeQp = Number(roomState.selectedQuizPlayer || 0);
     const qScores = Array.isArray(roomState.quizScores) ? roomState.quizScores : [0, 0, 0];
     for (let i = 0; i < 3; i++) {
@@ -1068,7 +1402,6 @@
     ansEl.textContent = 'الجواب: ' + (roomState.quizAnswer || "");
     ansEl.style.display = roomState.quizAnswerVisible ? 'block' : 'none';
 
-    // 5. المايك المفتوح
     const stSeats = roomState.stageSeats || {};
     for (let k = 0; k < 4; k++) {
       const el = document.getElementById('st-' + k);
@@ -1081,9 +1414,12 @@
     document.getElementById('stageTopic').textContent = roomState.stageTopic || "";
     const stSec = Number(roomState.stageSeconds ?? 45);
     document.getElementById('stageTimer').textContent = `00:${String(stSec).padStart(2, '0')}`;
+
+    renderAdminPanel();
   }
 
   onValue(roomRef, (snapshot) => {
+    if (isKicked) return;
     document.getElementById('syncStatus').textContent = '🟢 متصل ومباشر';
     if (snapshot.exists()) {
       renderUI(snapshot.val());
@@ -1096,6 +1432,7 @@
 
   const startTs = Date.now();
   onChildAdded(reactionsRef, (snap) => {
+    if (isKicked) return;
     const val = snap.val();
     if (val && val.emoji && (!val.ts || val.ts >= startTs - 1000)) {
       showFloatingEmoji(val.emoji);
@@ -1103,6 +1440,7 @@
   });
 
   window.addEventListener("beforeunload", () => {
+    remove(ref(db, `js_dan_live_room/online_users/${clientId}`)).catch(() => {});
     remove(ref(db, `js_dan_live_room/voice_peers/${clientId}`)).catch(() => {});
     remove(ref(db, `js_dan_live_room/voice_signals/${clientId}`)).catch(() => {});
   });
